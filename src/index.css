@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-base: #ffffff;
+  --color-bg-layer: #f4f5f7;
+  --color-bg-surface: #ffffff;
+  --color-bg-raised: #f4f5f7;
+  --color-bg-overlay: #ebecf0;
+  --color-border-subtle: #dfe1e6;
+  --color-border-default: #c1c7d0;
+  --color-border-strong: #97a0af;
+  --color-accent: #0052cc;
+  --color-accent-glow: #0065ff;
+  --color-titlebar-bg: #0049b0;
+  --color-tomato: #d94a3a;
+  --color-tomato-dim: #fef0ef;
+  --color-accent-dim: #deebff;
+  --color-cyan: #00875a;
+  --color-cyan-dim: #e3fcef;
+  --color-red: #de350b;
+  --color-red-dim: #ffebe6;
+  --color-text: #172b4d;
+  --color-text-secondary: #5e6c84;
+  --color-text-muted: #6b778c;
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-hover: #f4f5f7;
+  --color-sidebar-active: #deebff;
+  --color-sidebar-text: #172b4d;
+  --color-sidebar-muted: #6b778c;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-bg-base);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 82, 204, 0.3); }
+  50% { box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.1); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out both;
+}

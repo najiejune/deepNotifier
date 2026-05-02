@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/najiejune/deepNotifier/main/gen/schemas/desktop-schema.json",
+  "productName": "deepNotifier",
+  "version": "0.1.0",
+  "identifier": "com.deepnotifier.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "deepNotifier",
+        "width": 1000,
+        "height": 630,
+        "minWidth": 864,
+        "minHeight": 500,
+        "center": true,
+        "decorations": false,
+        "transparent": false,
+        "resizable": true
+      },
+      {
+        "label": "marquee",
+        "url": "src/marquee/marquee.html",
+        "title": "",
+        "width": 1920,
+        "height": 40,
+        "x": 0,
+        "y": 0,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focusable": false,
+        "resizable": false
+      }
+    ],
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/icon.png"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
