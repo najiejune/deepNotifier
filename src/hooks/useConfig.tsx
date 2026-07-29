@@ -10,6 +10,7 @@ const defaultConfig: AppConfig = {
   dnd: { enabled: false, schedules: [] },
   timer: { pomodoro_work_mins: 25, pomodoro_short_break_mins: 1, pomodoro_long_break_mins: 0, pomodoro_rounds: 4, pomodoro_sound_file: "chime", auto_start_break: false, auto_start_work: false },
   marquee: { position: "Top", speed: 80, height: 40, font_size: 16, font_family: "sans-serif", icon_before: "", icon_after: "", bg_color: "#1e3a5f", text_color: "#ffffff", opacity: 0.9, duration_secs: 10 },
+  hook: { enabled: false, cli_tools: [], approval_timeout_secs: 120, on_stop_sound: true, stop_sound_file: "klaudio-minimal-zen-stop", on_stop_marquee: true, on_notification_sound: true, notification_sound_file: "klaudio-sci-fi-terminal-notification", on_notification_marquee: true, approval_timeout_enabled: false, approval_timeout_sound_enabled: true, approval_timeout_sound_file: "klaudio-retro-8bit-notification" },
   todo: { pull_enabled: false, pull_endpoints: [], push_enabled: false, push_port: 3928 },
 };
 

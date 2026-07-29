@@ -53,6 +53,7 @@ pub async fn poll_endpoint(
         timestamp: chrono::Local::now(),
         raw_payload: None,
         url: Some(endpoint.url.clone()),
+        pid: None,
     }))
 }
 

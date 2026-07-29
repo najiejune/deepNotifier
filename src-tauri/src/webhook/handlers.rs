@@ -3,12 +3,13 @@ use axum::http::HeaderMap;
 use axum::Json;
 use serde_json::Value;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{info, warn};
 
 use crate::notifier::dispatcher::NotificationEvent;
 use crate::notifier::dispatcher::NotificationSource;
 use crate::notifier::dispatcher::Severity;
-use crate::state::AppState;
+use crate::state::{AppState, ApprovalSession};
 use crate::webhook::bitbucket;
 use crate::webhook::custom;
 use crate::webhook::verify;
@@ -161,6 +162,7 @@ fn parse_github_event(event_type: &str, payload: &Value) -> NotificationEvent {
         timestamp: chrono::Local::now(),
         raw_payload: Some(payload.clone()),
         url: if html_url.is_empty() { None } else { Some(html_url) },
+        pid: None,
     }
 }
 
@@ -224,6 +226,7 @@ fn parse_gitlab_event(event_type: &str, payload: &Value) -> NotificationEvent {
         timestamp: chrono::Local::now(),
         raw_payload: Some(payload.clone()),
         url: if web_url.is_empty() { None } else { Some(web_url) },
+        pid: None,
     }
 }
 
@@ -289,5 +292,105 @@ pub async fn custom_handler(
     info!("Custom webhook: {}", event.title);
 
     let _ = state.notification_tx.send(event).await;
+    "OK"
+}
+
+pub async fn cli_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> &'static str {
+    let config = state.config.read().await;
+    if !config.hook.enabled {
+        drop(config);
+        return "CLI hook disabled";
+    }
+    let timeout_secs = config.hook.approval_timeout_secs;
+    drop(config);
+
+    let event_type = payload
+        .get("event_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    match event_type {
+        "pretooluse" => {
+            // Record the start of an approval session
+            let session_id = payload
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let pid = payload.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let cli_id = payload
+                .get("cli_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let cli_name = payload
+                .get("cli_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&cli_id)
+                .to_string();
+
+            if !session_id.is_empty() && pid > 0 {
+                state.approval_sessions.write().await.insert(
+                    session_id.to_string(),
+                    ApprovalSession {
+                        start: Instant::now(),
+                        pid,
+                        cli_id,
+                        cli_name,
+                    },
+                );
+            }
+
+            // Still dispatch for history / frontend panel (dispatcher suppresses sound etc.)
+            let event = custom::parse_custom_event(&payload, "title", "body", "Info");
+            info!("CLI hook pretooluse: session={}", session_id);
+            let _ = state.notification_tx.send(event).await;
+        }
+        "posttooluse" => {
+            let session_id = payload
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            let session = {
+                let mut sessions = state.approval_sessions.write().await;
+                sessions.remove(session_id)
+            };
+
+            let Some(session) = session else {
+                info!(
+                    "CLI hook posttooluse: session {} not found (already expired or cleaned up)",
+                    session_id
+                );
+                return "OK";
+            };
+
+            let elapsed = session.start.elapsed().as_secs();
+            if elapsed <= timeout_secs as u64 {
+                info!(
+                    "CLI hook posttooluse: session {} elapsed {}s <= {}s, suppressed",
+                    session_id, elapsed, timeout_secs
+                );
+                return "OK";
+            }
+
+            info!(
+                "CLI hook posttooluse: session {} elapsed {}s > {}s, notifying",
+                session_id, elapsed, timeout_secs
+            );
+
+            let event = custom::parse_custom_event(&payload, "title", "body", "Info");
+            let _ = state.notification_tx.send(event).await;
+        }
+        _ => {
+            // stop / notification / etc. — dispatch normally
+            let event = custom::parse_custom_event(&payload, "title", "body", "Info");
+            info!("CLI hook {}: {}", event_type, event.title);
+            let _ = state.notification_tx.send(event).await;
+        }
+    }
+
     "OK"
 }

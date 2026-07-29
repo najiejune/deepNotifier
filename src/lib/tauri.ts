@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppConfig, NotificationEvent, TimerState, TodoItem } from "@/types";
+import type { AppConfig, CliStatus, NotificationEvent, TimerState, TodoItem, HookInstallResult } from "@/types";
 
 export const api = {
   getConfig: () => invoke<AppConfig>("get_config"),
@@ -45,6 +45,26 @@ export const api = {
   listSounds: () => invoke<string[]>("list_sounds"),
   importSound: (path: string) => invoke<string>("import_sound", { path }),
   previewSound: (soundFile: string) => invoke<void>("preview_sound", { soundFile }),
+
+  installHooks: (cliIds?: string[]) =>
+    invoke<HookInstallResult[]>("install_hooks", { cliIds: cliIds ?? null }),
+  uninstallHooks: (cliIds?: string[]) =>
+    invoke<HookInstallResult[]>("uninstall_hooks", { cliIds: cliIds ?? null }),
+  checkCliStatus: () =>
+    invoke<CliStatus[]>("check_cli_status"),
+
+  focusPendingPid: () => invoke<void>("focus_pending_pid"),
+
+  // Debug / test
+  debugFocusPid: (pid: number) =>
+    invoke<{
+      pid: number;
+      direct_window_found: boolean;
+      parent_chain: number[];
+      window_found_via_parent: number | null;
+      success: boolean;
+    }>("debug_focus_pid", { pid }),
+  debugGetPendingPid: () => invoke<number | null>("debug_get_pending_pid"),
 };
 
 export function onEvent<T>(

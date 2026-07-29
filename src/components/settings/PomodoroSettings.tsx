@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/Input";
 import { Toggle } from "@/components/ui/Toggle";
+import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/tauri";
+import { Volume2 } from "lucide-react";
 import type { TimerConfig } from "@/types";
 
 interface Props {
@@ -60,15 +62,20 @@ export function PomodoroSettings({ config, onChange }: Props) {
           <p className="text-sm font-medium">{t.settings.pomodoro.sound}</p>
           <p className="text-xs text-text-muted mt-0.5">{t.settings.pomodoro.soundDesc}</p>
         </div>
-        <select
-          value={config.pomodoro_sound_file}
-          onChange={(e) => onChange({ ...config, pomodoro_sound_file: e.target.value })}
-          className="text-[11px] font-mono bg-white border border-border-subtle rounded-sm px-2 py-1.5 text-text-secondary w-28"
-        >
-          {sounds.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1">
+          <select
+            value={config.pomodoro_sound_file}
+            onChange={(e) => onChange({ ...config, pomodoro_sound_file: e.target.value })}
+            className="text-[11px] font-mono bg-white border border-border-subtle rounded-sm px-2 py-1.5 text-text-secondary w-28"
+          >
+            {sounds.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <Button size="sm" variant="ghost" onClick={() => api.previewSound(config.pomodoro_sound_file)} title="Preview">
+            <Volume2 size={12} />
+          </Button>
+        </div>
       </div>
 
       <div className="border-t border-border-subtle pt-4 space-y-3">

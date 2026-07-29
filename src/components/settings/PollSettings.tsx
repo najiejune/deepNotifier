@@ -116,19 +116,19 @@ function EndpointDialog({
               onChange={(e) => update({ interval_secs: (Number(e.target.value) || 1) * 60 })}
               className="w-20"
             />
-            <span className="text-[11px] text-text-muted font-mono">{t.settings.poll.interval}</span>
+            <span className="text-xs text-text-secondary">{t.settings.poll.interval}</span>
             <Input
               type="number"
               value={ep.timeout_secs}
               onChange={(e) => update({ timeout_secs: Number(e.target.value) || 30 })}
               className="w-20"
             />
-            <span className="text-[11px] text-text-muted font-mono">{t.settings.poll.timeout}</span>
+            <span className="text-xs text-text-secondary">{t.settings.poll.timeout}</span>
           </div>
 
           {/* Headers */}
           <div>
-            <p className="text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">{t.settings.poll.headers}</p>
+            <p className="text-xs font-medium text-text-secondary mb-1.5">{t.settings.poll.headers}</p>
             <div className="space-y-1">
               {rows.map((row) => (
                 <div key={row.id} className="flex items-center gap-1">
@@ -153,18 +153,15 @@ function EndpointDialog({
                 </div>
               ))}
             </div>
-            <button
-              onClick={addRow}
-              className="text-[10px] font-mono text-text-muted hover:text-accent mt-1"
-            >
+            <Button size="sm" variant="ghost" onClick={addRow} className="mt-1 text-[11px]">
               {t.settings.poll.addHeader}
-            </button>
+            </Button>
           </div>
 
           {/* Body (POST only) */}
           {ep.method === "POST" && (
             <div>
-              <p className="text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">{t.settings.poll.body}</p>
+              <p className="text-xs font-medium text-text-secondary mb-1.5">{t.settings.poll.body}</p>
               <textarea
                 placeholder={t.settings.poll.bodyPlaceholder}
                 value={ep.body ?? ""}

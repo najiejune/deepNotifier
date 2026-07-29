@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub timer: TimerConfig,
     pub marquee: MarqueeConfig,
     pub todo: TodoConfig,
+    pub hook: HookConfig,
 }
 
 impl Default for AppConfig {
@@ -24,6 +25,7 @@ impl Default for AppConfig {
             timer: TimerConfig::default(),
             marquee: MarqueeConfig::default(),
             todo: TodoConfig::default(),
+            hook: HookConfig::default(),
         }
     }
 }
@@ -309,6 +311,88 @@ pub struct TodoPullEndpoint {
 
 fn default_true() -> bool { true }
 fn default_pull_interval() -> u64 { 86400 }
+
+fn default_stop_sound() -> String { "klaudio-minimal-zen-stop".into() }
+fn default_notification_sound() -> String { "klaudio-sci-fi-terminal-notification".into() }
+fn default_approval_sound() -> String { "klaudio-retro-8bit-notification".into() }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookConfig {
+    pub enabled: bool,
+    pub cli_tools: Vec<CliToolConfig>,
+    pub approval_timeout_secs: u32,
+    // Shared hook notification settings (applied to all CLI tools)
+    pub on_stop_sound: bool,
+    #[serde(default = "default_stop_sound")]
+    pub stop_sound_file: String,
+    pub on_stop_marquee: bool,
+    pub on_notification_sound: bool,
+    #[serde(default = "default_notification_sound")]
+    pub notification_sound_file: String,
+    pub on_notification_marquee: bool,
+    pub approval_timeout_enabled: bool,
+    #[serde(default)]
+    pub approval_timeout_sound_enabled: bool,
+    #[serde(default = "default_approval_sound")]
+    pub approval_timeout_sound_file: String,
+}
+
+impl Default for HookConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cli_tools: default_cli_tools(),
+            approval_timeout_secs: 120,
+            on_stop_sound: true,
+            stop_sound_file: default_stop_sound(),
+            on_stop_marquee: true,
+            on_notification_sound: true,
+            notification_sound_file: default_notification_sound(),
+            on_notification_marquee: true,
+            approval_timeout_enabled: false,
+            approval_timeout_sound_enabled: true,
+            approval_timeout_sound_file: default_approval_sound(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliToolConfig {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub install_status: HookStatus,
+    pub config_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum HookStatus {
+    NotInstalled,
+    Installed,
+    Error(String),
+}
+
+fn default_cli_tools() -> Vec<CliToolConfig> {
+    fn base(id: &str, name: &str) -> CliToolConfig {
+        CliToolConfig {
+            id: id.into(),
+            name: name.into(),
+            enabled: false,
+            install_status: HookStatus::NotInstalled,
+            config_path: None,
+        }
+    }
+    vec![
+        base("claude", "Claude Code"),
+        base("opencode", "OpenCode"),
+        base("codex", "Codex"),
+        base("kiro", "Kiro"),
+        base("codebuddy", "CodeBuddy"),
+        base("qoder", "Qoder"),
+        base("gemini", "Gemini CLI"),
+    ]
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoConfig {

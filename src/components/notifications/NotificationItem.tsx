@@ -4,6 +4,7 @@ import {
   Clock,
   Timer,
   Radio,
+  Terminal,
   ArrowUpRight,
   AlertTriangle,
   Info,
@@ -23,6 +24,8 @@ function getSourceLabel(source: NotificationSource) {
   if (source === "System") return "System";
   if (typeof source === "object" && "Poll" in source)
     return source.Poll.endpoint_name;
+  if (typeof source === "object" && "Hook" in source)
+    return source.Hook.cli_name;
   return "Unknown";
 }
 
@@ -35,6 +38,7 @@ function SourceIcon({ source }: { source: NotificationSource }) {
   if (source === "Timer") return <Clock size={14} className={cls} />;
   if (source === "Pomodoro") return <Timer size={14} className={cls} />;
   if (source === "System") return <Radio size={14} className={cls} />;
+  if (typeof source === "object" && "Hook" in source) return <Terminal size={14} className={cls} />;
   return <Radio size={14} className={cls} />;
 }
 

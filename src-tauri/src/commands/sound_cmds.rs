@@ -1,15 +1,17 @@
+use crate::notifier::embedded_sounds;
 use crate::state::AppState;
 use tauri::State;
 
 #[tauri::command]
 pub async fn list_sounds(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let sounds_dir = state.config_dir.join("sounds");
-    let builtins = vec![
+    let mut builtins = vec![
         "ping".to_string(),
         "chime".to_string(),
         "bell".to_string(),
         "alarm".to_string(),
     ];
+    builtins.extend(embedded_sounds::klaudio_sound_names());
 
     let mut sounds: Vec<String> = builtins;
 

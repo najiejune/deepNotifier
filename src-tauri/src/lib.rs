@@ -7,7 +7,8 @@ mod config;
 mod dnd;
 mod error;
 mod history;
-mod notifier;
+mod hook;
+pub mod notifier;
 mod poller;
 mod state;
 mod timer;
@@ -34,23 +35,51 @@ pub fn run() {
                 .expect("Failed to resolve app config dir");
             std::fs::create_dir_all(&config_dir).ok();
 
+            // Extract built-in Klaudio sounds to config sounds directory
+            notifier::embedded_sounds::extract_to(&config_dir.join("sounds"));
+
             let app_config = config::persistence::load_or_create(&config_dir);
             let (tx, rx) = tokio::sync::mpsc::channel::<notifier::dispatcher::NotificationEvent>(256);
 
             let todo_store = todo::store::TodoStore::new(&config_dir);
 
-            // Configure the statically-defined marquee window (primary monitor)
+            // Configure the statically-defined marquee window (primary monitor).
+            // Marquee windows are never hidden: they are parked off-screen and
+            // kept visible so WebView2 never suspends their pages
+            // (see notifier::marquee::PARK_POS).
             if let Some(marquee_win) = app.get_webview_window("marquee") {
                 let _ = marquee_win.set_ignore_cursor_events(true);
+                let _ = marquee_win.show();
             }
 
             // Create additional marquee windows for extra monitors
             if let Ok(monitors) = app.available_monitors() {
-                for (i, monitor) in monitors.iter().skip(1).enumerate() {
+                let primary = app.primary_monitor().ok().flatten();
+                for (i, monitor) in monitors.iter().enumerate() {
+                    tracing::info!(
+                        "Monitor {}: name={:?} pos={:?} size={:?} scale={}",
+                        i,
+                        monitor.name(),
+                        monitor.position(),
+                        monitor.size(),
+                        monitor.scale_factor()
+                    );
+                }
+                let mut extra_idx = 0;
+                for monitor in monitors.iter() {
+                    // Only create dynamic windows for non-primary monitors;
+                    // enumeration order is not guaranteed to put primary first.
+                    let is_primary = primary.as_ref().is_some_and(|p| {
+                        p.position() == monitor.position() && p.size() == monitor.size()
+                    });
+                    if is_primary {
+                        continue;
+                    }
+                    extra_idx += 1;
                     let size = monitor.size();
                     let pos = monitor.position();
                     let sf = monitor.scale_factor();
-                    let label = format!("marquee-{}", i + 1);
+                    let label = format!("marquee-{}", extra_idx);
                     let builder = tauri::WebviewWindowBuilder::new(
                         app,
                         &label,
@@ -60,22 +89,81 @@ pub fn run() {
                     .inner_size(size.width as f64 / sf, 40.0)
                     .position(pos.x as f64 / sf, pos.y as f64 / sf)
                     .decorations(false)
-                    .transparent(true)
+                    // Opaque on purpose: transparent (layered) WebView2 windows
+                    // fail to composite on displays driven by a different GPU
+                    // (multi-GPU laptops, e.g. external monitor on NVIDIA dGPU),
+                    // showing nothing but a bare window frame.
+                    .transparent(false)
                     .always_on_top(true)
                     .skip_taskbar(true)
                     .visible(false)
-                    .focused(false)
+                    .focusable(false)
                     .resizable(false);
 
                     match builder.build() {
                         Ok(win) => {
+                            tracing::info!("Created marquee window '{}' at {:?}", label, pos);
                             let _ = win.set_ignore_cursor_events(true);
+                            // Move it onto its own monitor first (physical
+                            // coords) so it adopts that monitor's DPI context.
+                            let _ = win.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
+                            let _ = win.show();
                         }
                         Err(e) => {
-                            eprintln!("Failed to create marquee window for monitor: {}", e);
+                            tracing::error!("Failed to create marquee window for monitor: {}", e);
                         }
                     }
                 }
+            }
+
+            // Park every marquee window below its ASSIGNED monitor (keeps each
+            // window's DPI context pinned to its own screen).
+            notifier::marquee::park_all(&app.handle());
+
+            tracing::info!(
+                "Marquee windows at startup: {:?}",
+                app.webview_windows().keys().collect::<Vec<_>>()
+            );
+
+            let cli_installed_cache: state::CliStatusCache =
+                Arc::new(RwLock::new(std::collections::HashMap::new()));
+
+            // Pre-warm CLI installation status cache in the background
+            {
+                let cache = cli_installed_cache.clone();
+                let cwd = std::env::current_dir().unwrap_or_else(|_| config_dir.clone());
+                tauri::async_runtime::spawn(async move {
+                    let metas = hook::cli_configs::all_cli_metas();
+                    let mut map = std::collections::HashMap::new();
+                    for meta in &metas {
+                        let installed = hook::cli_configs::check_cli_installed(meta, &cwd);
+                        map.insert(meta.id.to_string(), installed);
+                    }
+                    *cache.write().await = map;
+                    tracing::info!("CLI installation status cache warmed");
+                });
+            }
+
+            let approval_sessions: state::ApprovalSessions =
+                Arc::new(RwLock::new(std::collections::HashMap::new()));
+
+            // Clean up stale marker files from previous runs
+            if let Some(home) = dirs::home_dir() {
+                let approval_dir = home.join(".deepnotifier").join("approval");
+                let _ = std::fs::remove_dir_all(&approval_dir);
+            }
+
+            // Spawn a periodic cleanup for stale approval sessions
+            {
+                let sessions = approval_sessions.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+                        sessions.write().await.retain(|_, s| {
+                            s.start.elapsed().as_secs() < 600 // 10 min max
+                        });
+                    }
+                });
             }
 
             let state = AppState {
@@ -88,6 +176,9 @@ pub fn run() {
                 timer_state: Arc::new(RwLock::new(timer::engine::TimerState::default())),
                 timer_cancel: Arc::new(RwLock::new(None)),
                 todo_store: Arc::new(RwLock::new(todo_store)),
+                cli_installed_cache,
+                pending_pid: Arc::new(RwLock::new(None)),
+                approval_sessions,
             };
             app.manage(state.clone());
 
@@ -149,6 +240,9 @@ pub fn run() {
             commands::config_cmds::get_wan_ip,
             commands::notification_cmds::get_notifications,
             commands::notification_cmds::clear_notifications,
+            commands::notification_cmds::focus_pending_pid,
+            commands::notification_cmds::debug_focus_pid,
+            commands::notification_cmds::debug_get_pending_pid,
             commands::timer_cmds::stop_timer,
             commands::timer_cmds::pause_timer,
             commands::timer_cmds::get_timer_state,
@@ -157,6 +251,7 @@ pub fn run() {
             commands::dnd_cmds::get_dnd_status,
             commands::marquee_cmds::show_marquee,
             commands::marquee_cmds::hide_marquee,
+            notifier::marquee::get_marquee_state,
             commands::todo_cmds::get_todos,
             commands::todo_cmds::add_todo,
             commands::todo_cmds::toggle_todo,
@@ -164,6 +259,9 @@ pub fn run() {
             commands::sound_cmds::list_sounds,
             commands::sound_cmds::import_sound,
             commands::sound_cmds::preview_sound,
+            commands::hook_cmds::install_hooks,
+            commands::hook_cmds::uninstall_hooks,
+            commands::hook_cmds::check_cli_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running deepNotifier");

@@ -185,5 +185,6 @@ pub fn parse_bitbucket_event(event_key: &str, payload: &Value) -> Option<Notific
         timestamp: Local::now(),
         raw_payload: Some(payload.clone()),
         url,
+        pid: None,
     })
 }

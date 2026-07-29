@@ -8,8 +8,10 @@ import {
   Clock,
   Presentation,
   ListTodo,
+  Terminal,
   RotateCcw,
   AlertTriangle,
+  Bug,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useConfig } from "@/hooks/useConfig";
@@ -23,6 +25,8 @@ import { DndSettings } from "@/components/settings/DndSettings";
 import { PomodoroSettings } from "@/components/settings/PomodoroSettings";
 import { MarqueeSettings } from "@/components/settings/MarqueeSettings";
 import { TodoSettings } from "@/components/settings/TodoSettings";
+import { HookSettings } from "@/components/settings/HookSettings";
+import { DebugFocus } from "@/components/settings/DebugFocus";
 
 type Section =
   | "general"
@@ -32,7 +36,9 @@ type Section =
   | "dnd"
   | "pomodoro"
   | "marquee"
-  | "todo";
+  | "hook"
+  | "todo"
+  | "debug";
 
 export function SettingsPage() {
   const { config, loading, update, reset } = useConfig();
@@ -56,7 +62,9 @@ export function SettingsPage() {
     { id: "dnd", label: t.settings.sections.dnd, icon: Moon },
     { id: "pomodoro", label: t.settings.sections.pomodoro, icon: Clock },
     { id: "marquee", label: t.settings.sections.marquee, icon: Presentation },
+    { id: "hook", label: t.settings.sections.hook, icon: Terminal },
     { id: "todo", label: t.settings.sections.todo, icon: ListTodo },
+    { id: "debug", label: "Debug Focus", icon: Bug },
   ];
 
   const renderSection = () => {
@@ -110,6 +118,13 @@ export function SettingsPage() {
             onChange={(v) => update("marquee", v)}
           />
         );
+      case "hook":
+        return (
+          <HookSettings
+            config={config.hook}
+            onChange={(v) => update("hook", v)}
+          />
+        );
       case "todo":
         return (
           <TodoSettings
@@ -117,6 +132,8 @@ export function SettingsPage() {
             onChange={(v) => update("todo", v)}
           />
         );
+      case "debug":
+        return <DebugFocus />;
     }
   };
 

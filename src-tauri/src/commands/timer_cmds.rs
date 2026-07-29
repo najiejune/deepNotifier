@@ -73,6 +73,7 @@ fn spawn_timer_tick(app_handle: tauri::AppHandle, state: AppState) {
                     timestamp: chrono::Local::now(),
                     raw_payload: None,
                     url: None,
+                    pid: None,
                 };
                 let _ = state.notification_tx.send(event).await;
                 let _ = app_handle.emit("timer-completed", ());

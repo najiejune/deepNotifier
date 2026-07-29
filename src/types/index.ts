@@ -15,7 +15,8 @@ export type NotificationSource =
   | { Poll: { endpoint_name: string } }
   | "Timer"
   | "Pomodoro"
-  | "System";
+  | "System"
+  | { Hook: { cli_name: string } };
 
 export interface PollEndpoint {
   id: string;
@@ -141,6 +142,46 @@ export interface TodoConfig {
   push_port: number;
 }
 
+export type HookStatus = "NotInstalled" | "Installed" | { Error: string };
+
+export interface CliToolConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  install_status: HookStatus;
+  config_path?: string;
+}
+
+export interface HookConfig {
+  enabled: boolean;
+  cli_tools: CliToolConfig[];
+  approval_timeout_secs: number;
+  // Shared hook notification settings
+  on_stop_sound: boolean;
+  stop_sound_file: string;
+  on_stop_marquee: boolean;
+  on_notification_sound: boolean;
+  notification_sound_file: string;
+  on_notification_marquee: boolean;
+  approval_timeout_enabled: boolean;
+  approval_timeout_sound_enabled: boolean;
+  approval_timeout_sound_file: string;
+}
+
+export interface CliStatus {
+  cli_id: string;
+  cli_installed: boolean;
+  hook_installed: HookStatus;
+}
+
+export interface HookInstallResult {
+  cli_id: string;
+  success: boolean;
+  message: string;
+  config_path: string;
+  events_injected: string[];
+}
+
 export interface AppConfig {
   general: GeneralConfig;
   webhook: WebhookConfig;
@@ -150,6 +191,7 @@ export interface AppConfig {
   timer: TimerConfig;
   marquee: MarqueeConfig;
   todo: TodoConfig;
+  hook: HookConfig;
 }
 
 export interface NotificationEvent {

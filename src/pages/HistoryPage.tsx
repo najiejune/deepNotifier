@@ -10,6 +10,7 @@ import type { NotificationSource } from "@/types";
 
 function sourceToString(s: NotificationSource): string {
   if (typeof s === "object" && "Poll" in s) return s.Poll.endpoint_name;
+  if (typeof s === "object" && "Hook" in s) return `Hook: ${s.Hook.cli_name}`;
   return s;
 }
 

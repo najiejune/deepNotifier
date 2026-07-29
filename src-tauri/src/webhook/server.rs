@@ -15,6 +15,7 @@ pub fn start(app_handle: tauri::AppHandle, state: AppState) {
             .route("/webhook/gitlab", post(handlers::gitlab_handler))
             .route("/webhook/bitbucket", post(handlers::bitbucket_handler))
             .route("/webhook/custom", post(handlers::custom_handler))
+            .route("/hook/cli", post(handlers::cli_handler))
             .with_state(shared_state.clone());
 
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
