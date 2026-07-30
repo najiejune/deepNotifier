@@ -131,6 +131,24 @@ pub fn all_cli_metas() -> Vec<CliMeta> {
             binary_names: &["qoder", "qoder.exe"],
             sentinel_paths: &["~/.qoder/"],
         },
+        CliMeta {
+            id: "kimi",
+            name: "Kimi Code",
+            _vendor: "Moonshot AI",
+            // Kimi Code CLI hooks (Beta): [[hooks]] array tables in
+            // ~/.kimi/config.toml; events Stop / Notification / PreToolUse /
+            // PostToolUse all exist (13 lifecycle events total).
+            stop_event: Some("Stop"),
+            notification_event: Some("Notification"),
+            pretool_event: Some("PreToolUse"),
+            posttool_event: Some("PostToolUse"),
+            config_paths: &["~/.kimi/config.toml"],
+            config_format: ConfigFormat::Toml,
+            plugin_create_dirs: &[],
+            approval_timeout_supported: true,
+            binary_names: &["kimi", "kimi.exe", "kimi-cli"],
+            sentinel_paths: &["~/.kimi/", "~/.kimi-code/"],
+        },
     ]
 }
 

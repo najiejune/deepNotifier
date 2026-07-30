@@ -109,6 +109,18 @@ export function QoderIcon(props: IconProps) {
   );
 }
 
+// Kimi Code — Moonshot AI, simple monogram (no official SVG logo published)
+export function KimiIcon(props: IconProps) {
+  return (
+    <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width={props.size ?? 20} height={props.size ?? 20} {...props}>
+      <title>Kimi Code</title>
+      <rect x="1" y="1" width="22" height="22" rx="5" fill="#1D1D1F"/>
+      <path d="M7.2 6v12M7.2 12.6 15.8 6M9.6 11.4 16.4 18" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <circle cx="17.6" cy="17.2" r="1.5" fill="#4C9AFF"/>
+    </svg>
+  );
+}
+
 export const CLI_ICON_MAP: Record<string, React.FC<IconProps>> = {
   claude: ClaudeIcon,
   codex: CodexIcon,
@@ -117,4 +129,5 @@ export const CLI_ICON_MAP: Record<string, React.FC<IconProps>> = {
   kiro: KiroIcon,
   codebuddy: CodeBuddyIcon,
   qoder: QoderIcon,
+  kimi: KimiIcon,
 };

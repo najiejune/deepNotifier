@@ -22,6 +22,7 @@ const CLI_VENDORS: Record<string, string> = {
   kiro: "Amazon",
   codebuddy: "Tencent",
   qoder: "QoderAI",
+  kimi: "Moonshot AI",
 };
 
 export function HookSettings({ config, onChange }: Props) {

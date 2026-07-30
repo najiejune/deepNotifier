@@ -373,7 +373,7 @@ pub enum HookStatus {
     Error(String),
 }
 
-fn default_cli_tools() -> Vec<CliToolConfig> {
+pub(crate) fn default_cli_tools() -> Vec<CliToolConfig> {
     fn base(id: &str, name: &str) -> CliToolConfig {
         CliToolConfig {
             id: id.into(),
@@ -391,6 +391,7 @@ fn default_cli_tools() -> Vec<CliToolConfig> {
         base("codebuddy", "CodeBuddy"),
         base("qoder", "Qoder"),
         base("gemini", "Gemini CLI"),
+        base("kimi", "Kimi Code"),
     ]
 }
 

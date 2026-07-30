@@ -520,10 +520,17 @@ fn inject_json_plugin(
     Ok(())
 }
 
-// ---- TOML injection (Codex) ----
+// ---- TOML injection (Codex / Kimi) ----
+
+/// Marker used to recognise deepNotifier-owned entries in Kimi's `[[hooks]]`
+/// array tables. Unlike the JSON formats we cannot add an extra field (Kimi's
+/// parser may reject unknown keys), and unlike Codex we cannot prefix the
+/// command with a `#` comment (cmd.exe has no `#` comments), so ownership is
+/// identified by our webhook path, which only deepNotifier commands contain.
+const KIMI_OWNERSHIP_MARKER: &str = "/hook/cli";
 
 fn inject_toml(
-    _cli_id: &str,
+    cli_id: &str,
     config_path: &Path,
     stop_cmd: Option<&str>,
     notif_cmd: Option<&str>,
@@ -545,29 +552,60 @@ fn inject_toml(
             .map_err(|e| format!("Failed to parse TOML config: {}", e))?
     };
 
-    let hooks_table = root
-        .as_table_mut()
-        .ok_or("TOML root is not a table")?
-        .entry("hooks")
-        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    match cli_id {
+        // Kimi: `[[hooks]]` array of tables with event/command fields
+        "kimi" => {
+            let hooks_value = root
+                .as_table_mut()
+                .ok_or("TOML root is not a table")?
+                .entry("hooks")
+                .or_insert_with(|| toml::Value::Array(Vec::new()));
+            let hooks = hooks_value
+                .as_array_mut()
+                .ok_or("hooks is not an array")?;
+            let events: [(&str, Option<&str>); 4] = [
+                ("stop", stop_cmd),
+                ("notification", notif_cmd),
+                ("pretooluse", pretool_cmd),
+                ("posttooluse", posttool_cmd),
+            ];
+            for (kind, cmd) in events {
+                if let Some(cmd) = cmd {
+                    let event = match kind {
+                        "stop" => meta.stop_event.unwrap_or("Stop"),
+                        "notification" => meta.notification_event.unwrap_or("Notification"),
+                        "pretooluse" => meta.pretool_event.unwrap_or("PreToolUse"),
+                        _ => meta.posttool_event.unwrap_or("PostToolUse"),
+                    };
+                    inject_toml_kimi_event(hooks, event, cmd);
+                }
+            }
+        }
+        // Codex TOML format: [hooks] stop = ["cmd1", "cmd2"], pre_tool_use = [...]
+        _ => {
+            let hooks_table = root
+                .as_table_mut()
+                .ok_or("TOML root is not a table")?
+                .entry("hooks")
+                .or_insert_with(|| toml::Value::Table(toml::Table::new()));
 
-    let hooks = hooks_table
-        .as_table_mut()
-        .ok_or("hooks is not a table")?;
+            let hooks = hooks_table
+                .as_table_mut()
+                .ok_or("hooks is not a table")?;
 
-    // Codex TOML format: [hooks] stop = ["cmd1", "cmd2"], pre_tool_use = [...]
-    // Map event names to TOML key names
-    if let Some(cmd) = stop_cmd {
-        inject_toml_event(hooks, meta.stop_event.unwrap_or("stop"), cmd);
-    }
-    if let Some(cmd) = notif_cmd {
-        inject_toml_event(hooks, meta.notification_event.unwrap_or("notification"), cmd);
-    }
-    if let Some(cmd) = pretool_cmd {
-        inject_toml_event(hooks, meta.pretool_event.unwrap_or("pre_tool_use"), cmd);
-    }
-    if let Some(cmd) = posttool_cmd {
-        inject_toml_event(hooks, meta.posttool_event.unwrap_or("post_tool_use"), cmd);
+            if let Some(cmd) = stop_cmd {
+                inject_toml_event(hooks, meta.stop_event.unwrap_or("stop"), cmd);
+            }
+            if let Some(cmd) = notif_cmd {
+                inject_toml_event(hooks, meta.notification_event.unwrap_or("notification"), cmd);
+            }
+            if let Some(cmd) = pretool_cmd {
+                inject_toml_event(hooks, meta.pretool_event.unwrap_or("pre_tool_use"), cmd);
+            }
+            if let Some(cmd) = posttool_cmd {
+                inject_toml_event(hooks, meta.posttool_event.unwrap_or("post_tool_use"), cmd);
+            }
+        }
     }
 
     let new_content = toml::to_string_pretty(&root)
@@ -576,6 +614,28 @@ fn inject_toml(
         .map_err(|e| format!("Failed to write config: {}", e))?;
 
     Ok(())
+}
+
+/// Insert or replace the deepNotifier hook for one event in Kimi's
+/// `[[hooks]]` array-of-tables config. Owned entries are recognised by
+/// KIMI_OWNERSHIP_MARKER in the command, so re-install is idempotent and
+/// user-written hooks for the same event are left untouched.
+fn inject_toml_kimi_event(hooks: &mut Vec<toml::Value>, event: &str, command: &str) {
+    hooks.retain(|v| {
+        let owned = v
+            .get("command")
+            .and_then(|c| c.as_str())
+            .is_some_and(|c| c.contains(KIMI_OWNERSHIP_MARKER));
+        let same_event = v
+            .get("event")
+            .and_then(|e| e.as_str())
+            .is_some_and(|e| e == event);
+        !(owned && same_event)
+    });
+    let mut entry = toml::Table::new();
+    entry.insert("event".into(), toml::Value::String(event.into()));
+    entry.insert("command".into(), toml::Value::String(command.into()));
+    hooks.push(toml::Value::Table(entry));
 }
 
 fn inject_toml_event(
@@ -692,6 +752,7 @@ fn remove_toml_hooks(
     let mut removed = 0;
 
     if let Some(hooks) = root.get_mut("hooks") {
+        // Codex shape: hooks is a table of event -> string array
         if let Some(table) = hooks.as_table_mut() {
             for (_key, val) in table.iter_mut() {
                 if let Some(arr) = val.as_array_mut() {
@@ -707,6 +768,16 @@ fn remove_toml_hooks(
                 }
             }
         }
+        // Kimi shape: hooks is an array of { event, command } tables
+        if let Some(arr) = hooks.as_array_mut() {
+            let before = arr.len();
+            arr.retain(|v| {
+                !v.get("command")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|c| c.contains(KIMI_OWNERSHIP_MARKER))
+            });
+            removed += before - arr.len();
+        }
     }
 
     let new_content = toml::to_string_pretty(&root)
@@ -715,4 +786,76 @@ fn remove_toml_hooks(
         .map_err(|e| format!("Failed to write config: {}", e))?;
 
     Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hook::cli_configs::all_cli_metas;
+
+    fn kimi_meta() -> CliMeta {
+        all_cli_metas().into_iter().find(|m| m.id == "kimi").unwrap()
+    }
+
+    #[test]
+    fn kimi_inject_reinstall_and_remove_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("dn-kimi-inject-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        fs::write(
+            &cfg,
+            "default_model = \"k\"\nhooks = []\n",
+        )
+        .unwrap();
+
+        let meta = kimi_meta();
+        let install = |cfg: &Path| {
+            inject_toml(
+                "kimi",
+                cfg,
+                Some("node -e \"stop /hook/cli\""),
+                Some("node -e \"notif /hook/cli\""),
+                Some("node -e \"pre /hook/cli\""),
+                Some("node -e \"post /hook/cli\""),
+                &meta,
+            )
+            .unwrap()
+        };
+        install(&cfg);
+
+        let root: toml::Value =
+            toml::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
+        let hooks = root["hooks"].as_array().unwrap();
+        // 4 owned entries; scalar keys preserved
+        assert_eq!(hooks.len(), 4);
+        assert_eq!(root["default_model"].as_str().unwrap(), "k");
+        let owned: Vec<_> = hooks
+            .iter()
+            .filter(|h| {
+                h["command"].as_str().unwrap().contains(KIMI_OWNERSHIP_MARKER)
+            })
+            .collect();
+        assert_eq!(owned.len(), 4);
+        let mut events: Vec<_> = owned
+            .iter()
+            .map(|h| h["event"].as_str().unwrap().to_string())
+            .collect();
+        events.sort();
+        assert_eq!(events, ["Notification", "PostToolUse", "PreToolUse", "Stop"]);
+
+        // Re-install must not duplicate entries
+        install(&cfg);
+        let root: toml::Value =
+            toml::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert_eq!(root["hooks"].as_array().unwrap().len(), 4);
+
+        // Removal strips all owned entries
+        let removed = remove_toml_hooks("kimi", &cfg).unwrap();
+        assert_eq!(removed, 4);
+        let root: toml::Value =
+            toml::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert_eq!(root["hooks"].as_array().unwrap().len(), 0);
+
+        fs::remove_dir_all(&dir).ok();
+    }
 }
