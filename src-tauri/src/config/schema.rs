@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub general: GeneralConfig,
     pub webhook: WebhookConfig,
@@ -39,6 +40,7 @@ fn default_timeout() -> u64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GeneralConfig {
     #[serde(default = "default_language")]
     pub language: String,
@@ -123,6 +125,7 @@ impl Default for WebhookConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PollConfig {
     pub enabled: bool,
     pub endpoints: Vec<PollEndpoint>,
@@ -160,6 +163,7 @@ pub enum HttpMethod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NotificationConfig {
     pub sound_enabled: bool,
     pub sound_file: String,
@@ -167,6 +171,10 @@ pub struct NotificationConfig {
     pub marquee_enabled: bool,
     pub tray_enabled: bool,
     pub max_history: usize,
+    /// Toast card on-screen seconds per severity. 0 = sticky (manual close).
+    pub toast_info_secs: u32,
+    pub toast_warning_secs: u32,
+    pub toast_critical_secs: u32,
 }
 
 impl Default for NotificationConfig {
@@ -178,11 +186,15 @@ impl Default for NotificationConfig {
             marquee_enabled: true,
             tray_enabled: true,
             max_history: 500,
+            toast_info_secs: 10,
+            toast_warning_secs: 10,
+            toast_critical_secs: 0,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DndConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -222,6 +234,7 @@ pub enum WeekDay {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TimerConfig {
     pub pomodoro_work_mins: u32,
     pub pomodoro_short_break_mins: u32,
@@ -252,6 +265,7 @@ impl Default for TimerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MarqueeConfig {
     pub position: MarqueePosition,
     pub speed: u32,
@@ -264,13 +278,28 @@ pub struct MarqueeConfig {
     pub text_color: String,
     pub opacity: f32,
     pub duration_secs: u32,
+    /// Number of danmaku tracks (1..=3). Defaults to 2; the serde default keeps
+    /// config files written before this field existed parseable.
+    #[serde(default = "default_marquee_tracks")]
+    pub tracks: u32,
+}
+
+fn default_marquee_tracks() -> u32 {
+    2
+}
+
+impl MarqueeConfig {
+    /// Track count clamped to the supported range.
+    pub fn track_count(&self) -> usize {
+        (self.tracks as usize).clamp(1, 3)
+    }
 }
 
 impl Default for MarqueeConfig {
     fn default() -> Self {
         Self {
             position: MarqueePosition::Top,
-            speed: 80,
+            speed: 100,
             height: 40,
             font_size: 16,
             font_family: "sans-serif".into(),
@@ -279,7 +308,8 @@ impl Default for MarqueeConfig {
             bg_color: "#1e3a5f".into(),
             text_color: "#ffffff".into(),
             opacity: 0.9,
-            duration_secs: 10,
+            duration_secs: 30,
+            tracks: 2,
         }
     }
 }
@@ -317,6 +347,7 @@ fn default_notification_sound() -> String { "klaudio-sci-fi-terminal-notificatio
 fn default_approval_sound() -> String { "klaudio-retro-8bit-notification".into() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HookConfig {
     pub enabled: bool,
     pub cli_tools: Vec<CliToolConfig>,
@@ -396,6 +427,7 @@ pub(crate) fn default_cli_tools() -> Vec<CliToolConfig> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TodoConfig {
     pub pull_enabled: bool,
     #[serde(default)]

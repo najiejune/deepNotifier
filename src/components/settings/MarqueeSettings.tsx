@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
@@ -108,6 +108,18 @@ export function MarqueeSettings({ config, onChange }: Props) {
     }
   };
 
+  // While the preview bar is on screen, re-apply config changes live
+  // (debounced: slider drags fire onChange continuously). Without this the
+  // bar keeps the config from when the preview was toggled on, making e.g.
+  // the transparency slider look like it does nothing.
+  useEffect(() => {
+    if (!preview) return;
+    const timer = setTimeout(() => {
+      api.refreshMarqueeConfig().catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [config, preview]);
+
   return (
     <div className="space-y-5">
       {/* Preview */}
@@ -163,8 +175,8 @@ export function MarqueeSettings({ config, onChange }: Props) {
         </div>
       </div>
 
-      {/* Position & Duration */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Position & Duration & Tracks */}
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <p className="text-xs text-text-muted mb-1">{t.settings.marquee.position}</p>
           <Select
@@ -181,7 +193,19 @@ export function MarqueeSettings({ config, onChange }: Props) {
           <Input
             type="number"
             value={config.duration_secs}
-            onChange={(e) => patch({ duration_secs: Number(e.target.value) || 10 })}
+            onChange={(e) => patch({ duration_secs: Number(e.target.value) || 30 })}
+          />
+        </div>
+        <div>
+          <p className="text-xs text-text-muted mb-1">{t.settings.marquee.tracks}</p>
+          <Select
+            value={String(config.tracks)}
+            onChange={(e) => patch({ tracks: Number(e.target.value) })}
+            options={[
+              { value: "1", label: "1" },
+              { value: "2", label: "2" },
+              { value: "3", label: "3" },
+            ]}
           />
         </div>
       </div>
@@ -193,7 +217,7 @@ export function MarqueeSettings({ config, onChange }: Props) {
           <Input
             type="number"
             value={config.speed}
-            onChange={(e) => patch({ speed: Number(e.target.value) || 80 })}
+            onChange={(e) => patch({ speed: Number(e.target.value) || 100 })}
           />
         </div>
         <div>
@@ -283,7 +307,8 @@ export function MarqueeSettings({ config, onChange }: Props) {
         </div>
       </div>
 
-      {/* Opacity */}
+      {/* Background transparency (UI-inverted: config stores CSS opacity, but
+          the slider presents "transparency" where larger = more see-through) */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium">{t.settings.marquee.opacity}</p>
@@ -292,15 +317,17 @@ export function MarqueeSettings({ config, onChange }: Props) {
         <div className="flex items-center gap-2">
           <input
             type="range"
-            min="0.1"
+            min="0"
             max="1"
             step="0.05"
-            value={config.opacity}
-            onChange={(e) => patch({ opacity: parseFloat(e.target.value) })}
+            value={parseFloat((1 - config.opacity).toFixed(2))}
+            onChange={(e) =>
+              patch({ opacity: parseFloat((1 - parseFloat(e.target.value)).toFixed(2)) })
+            }
             className="w-24 h-1 accent-accent"
           />
           <span className="text-xs font-mono text-text-muted w-10 text-right">
-            {Math.round(config.opacity * 100)}%
+            {Math.round((1 - config.opacity) * 100)}%
           </span>
         </div>
       </div>

@@ -33,6 +33,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, "index.html"),
         marquee: resolve(__dirname, "src/marquee/marquee.html"),
+        toast: resolve(__dirname, "src/toast/toast.html"),
       },
     },
   },

@@ -89,7 +89,6 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
                             };
                             tracing::info!(pid, resolved=stored, "pretooluse: pre-resolved terminal PID while process alive");
                             *pending_pid.write().await = Some(stored);
-                            *crate::notifier::tray::NOTIFICATION_CLICK_PID.lock().unwrap() = Some(stored);
                         }
                         continue;
                     }
@@ -120,7 +119,7 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
 
                 if marquee_enabled {
                     let text = format!("{} — {}", event.title, event.body);
-                    crate::notifier::marquee::show(&app_handle, &text, &cfg.marquee);
+                    crate::notifier::marquee::enqueue(&app_handle, &text, event.severity.clone(), &cfg.marquee);
                 }
 
                 // Resolve the notification PID to the terminal emulator PID that owns
@@ -147,12 +146,23 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
                 };
                 tracing::info!(original=?event.pid, resolved=?focus_pid, "Stored focus PID");
                 *pending_pid.write().await = focus_pid;
-                *crate::notifier::tray::NOTIFICATION_CLICK_PID.lock().unwrap() = focus_pid;
 
                 crate::notifier::tray::update_tooltip(&app_handle, &event.title);
 
                 if cfg.notification.tray_enabled {
-                    crate::notifier::tray::notify(&event.title, &event.body);
+                    crate::notifier::toast::enqueue(
+                        &app_handle,
+                        &event.title,
+                        &event.body,
+                        event.severity.clone(),
+                        focus_pid,
+                        cfg.marquee.opacity,
+                        crate::notifier::toast::ToastDurations::from_secs(
+                            cfg.notification.toast_info_secs,
+                            cfg.notification.toast_warning_secs,
+                            cfg.notification.toast_critical_secs,
+                        ),
+                    );
                 }
             }
         }

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0065FF" stop-opacity="0.06"/>
+      <stop offset="0.5" stop-color="#0065FF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="#FAFBFC"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#sheen)"/>
+  <!-- faceted geometric D, Atlassian blue family -->
+  <polygon points="170,140 230,140 230,372 170,372" fill="#0065FF"/>
+  <polygon points="230,140 330,140 396,206 336,222 310,196 230,196" fill="#4C9AFF"/>
+  <polygon points="396,206 396,306 330,372 310,316 336,290 336,222" fill="#2684FF"/>
+  <polygon points="230,316 310,316 330,372 230,372" fill="#0052CC"/>
+</svg>

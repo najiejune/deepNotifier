@@ -39,11 +39,7 @@
         "focusable": false,
         "resizable": false
       }
-    ],
-    "trayIcon": {
-      "id": "main-tray",
-      "iconPath": "icons/icon.png"
-    }
+    ]
   },
   "bundle": {
     "active": true,

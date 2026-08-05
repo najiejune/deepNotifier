@@ -23,7 +23,18 @@ pub fn load_or_create(config_dir: &Path) -> AppConfig {
                     return config;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to parse config: {}, using defaults", e);
+                    // Keep the user's file for inspection instead of silently
+                    // destroying it: an unparseable config is backed up next to
+                    // the original before defaults are written.
+                    let backup = config_dir.join("config.toml.bak");
+                    if let Err(be) = std::fs::copy(&config_path, &backup) {
+                        tracing::warn!("Failed to back up unparseable config: {}", be);
+                    }
+                    tracing::warn!(
+                        "Failed to parse config: {}, backed up to {} and using defaults",
+                        e,
+                        backup.display()
+                    );
                 }
             },
             Err(e) => {
@@ -49,3 +60,40 @@ pub fn save(config_dir: &Path, config: &AppConfig) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression: configs written before newer sections/fields existed must
+    /// still load — missing parts fall back to defaults instead of resetting
+    /// the whole file (which used to silently wipe the language setting).
+    #[test]
+    fn old_config_missing_newer_fields_still_loads() {
+        let toml = r#"
+[general]
+language = "zh"
+mode = "push"
+run_on_startup = true
+minimize_to_tray = true
+close_to_tray = true
+
+[notification]
+sound_enabled = false
+sound_file = "bell"
+sound_volume = 0.5
+marquee_enabled = true
+tray_enabled = true
+max_history = 100
+"#;
+        let config: AppConfig = toml::from_str(toml).expect("old config must parse");
+        assert_eq!(config.general.language, "zh");
+        assert!(!config.notification.sound_enabled);
+        assert_eq!(config.notification.max_history, 100);
+        // Missing sections/fields fall back to defaults.
+        assert_eq!(config.hook.approval_timeout_secs, 120);
+        assert_eq!(config.todo.push_port, 3928);
+        assert_eq!(config.marquee.tracks, 2);
+    }
+}
+

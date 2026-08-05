@@ -72,6 +72,10 @@ export interface NotificationConfig {
   marquee_enabled: boolean;
   tray_enabled: boolean;
   max_history: number;
+  /** Toast card on-screen seconds per severity. 0 = sticky (manual close). */
+  toast_info_secs: number;
+  toast_warning_secs: number;
+  toast_critical_secs: number;
 }
 
 export interface DndConfig {
@@ -101,6 +105,7 @@ export interface MarqueeConfig {
   text_color: string;
   opacity: number;
   duration_secs: number;
+  tracks: number;
 }
 
 export type TodoSource =

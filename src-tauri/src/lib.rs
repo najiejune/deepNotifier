@@ -89,11 +89,14 @@ pub fn run() {
                     .inner_size(size.width as f64 / sf, 40.0)
                     .position(pos.x as f64 / sf, pos.y as f64 / sf)
                     .decorations(false)
-                    // Opaque on purpose: transparent (layered) WebView2 windows
-                    // fail to composite on displays driven by a different GPU
-                    // (multi-GPU laptops, e.g. external monitor on NVIDIA dGPU),
-                    // showing nothing but a bare window frame.
-                    .transparent(false)
+                    // Transparent on secondary monitors too. Previously opaque
+                    // out of concern that layered WebView2 windows fail to
+                    // composite on displays driven by a different GPU; verified
+                    // working on a hybrid-GPU laptop (iGPU primary + dGPU
+                    // external, 2026-08) — bar and text render, alpha applies.
+                    // If a machine ever shows only a bare frame here, revert
+                    // to `.transparent(false)`.
+                    .transparent(true)
                     .always_on_top(true)
                     .skip_taskbar(true)
                     .visible(false)
@@ -119,6 +122,42 @@ pub fn run() {
             // Park every marquee window below its ASSIGNED monitor (keeps each
             // window's DPI context pinned to its own screen).
             notifier::marquee::park_all(&app.handle());
+
+            // Create the toast window (custom notification cards, primary
+            // monitor bottom-right). Same lifecycle rules as the marquee
+            // windows: never hidden, parked off-screen so WebView2 never
+            // suspends the page. Unlike the marquee it must receive clicks
+            // (card body focuses the source terminal, × dismisses), so
+            // ignore_cursor_events stays OFF; focusable(false) keeps it from
+            // stealing focus when clicked.
+            match tauri::WebviewWindowBuilder::new(
+                app,
+                "toast",
+                tauri::WebviewUrl::App("src/toast/toast.html".into()),
+            )
+            .title("")
+            .inner_size(
+                notifier::toast::WIDTH_LOGICAL,
+                notifier::toast::CARD_H_LOGICAL,
+            )
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(false)
+            .focusable(false)
+            .resizable(false)
+            .build()
+            {
+                Ok(win) => {
+                    let _ = win.show();
+                    notifier::marquee::park_marquee_window(&win);
+                    tracing::info!("Created toast window");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to create toast window: {}", e);
+                }
+            }
 
             tracing::info!(
                 "Marquee windows at startup: {:?}",
@@ -251,7 +290,13 @@ pub fn run() {
             commands::dnd_cmds::get_dnd_status,
             commands::marquee_cmds::show_marquee,
             commands::marquee_cmds::hide_marquee,
+            commands::marquee_cmds::refresh_marquee_config,
             notifier::marquee::get_marquee_state,
+            notifier::toast::get_toast_state,
+            notifier::toast::toast_dismiss,
+            notifier::toast::toast_activate,
+            notifier::toast::toast_keepalive,
+            notifier::toast::toast_preview,
             commands::todo_cmds::get_todos,
             commands::todo_cmds::add_todo,
             commands::todo_cmds::toggle_todo,

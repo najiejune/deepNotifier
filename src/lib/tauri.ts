@@ -32,6 +32,7 @@ export const api = {
 
   showMarquee: (text: string) => invoke<void>("show_marquee", { text }),
   hideMarquee: () => invoke<void>("hide_marquee"),
+  refreshMarqueeConfig: () => invoke<void>("refresh_marquee_config"),
 
   getTodos: () => invoke<TodoItem[]>("get_todos"),
   addTodo: (text: string, dueDate?: string) =>
@@ -45,6 +46,8 @@ export const api = {
   listSounds: () => invoke<string[]>("list_sounds"),
   importSound: (path: string) => invoke<string>("import_sound", { path }),
   previewSound: (soundFile: string) => invoke<void>("preview_sound", { soundFile }),
+
+  previewToast: () => invoke<void>("toast_preview"),
 
   installHooks: (cliIds?: string[]) =>
     invoke<HookInstallResult[]>("install_hooks", { cliIds: cliIds ?? null }),

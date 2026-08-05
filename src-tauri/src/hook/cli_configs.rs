@@ -159,12 +159,22 @@ pub fn check_cli_installed(meta: &CliMeta, project_dir: &std::path::Path) -> boo
 
     // Check binaries on PATH
     for bin in meta.binary_names {
-        let result = if cfg!(windows) {
-            Command::new("where").arg(bin).output()
+        let mut cmd = if cfg!(windows) {
+            Command::new("where")
         } else {
-            Command::new("which").arg(bin).output()
+            Command::new("which")
         };
-        if let Ok(out) = result {
+        cmd.arg(bin);
+        // `where`/`which` are console-subsystem executables: without
+        // CREATE_NO_WINDOW every probe flashes a black console window when
+        // the app runs as a GUI-subsystem process.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        if let Ok(out) = cmd.output() {
             if out.status.success() {
                 return true;
             }

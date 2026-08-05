@@ -6,10 +6,10 @@ const defaultConfig: AppConfig = {
   general: { language: "en", mode: "Push", run_on_startup: false, minimize_to_tray: true, close_to_tray: true },
   webhook: { enabled: true, port: 3927, secret: "", github_events: [], gitlab_events: [], bitbucket_events: ["repo:push", "pullrequest:created", "pullrequest:updated", "pullrequest:approved", "pullrequest:merged", "repo:refs_changed", "pr:opened", "pr:modified", "pr:reviewer_approved", "pr:merged", "pr:declined"], custom_enabled: false, custom_title_path: "title", custom_body_path: "body", custom_severity: "Info" },
   poll: { enabled: false, endpoints: [] },
-  notification: { sound_enabled: true, sound_file: "ping", sound_volume: 0.7, marquee_enabled: true, tray_enabled: true, max_history: 500 },
+  notification: { sound_enabled: true, sound_file: "ping", sound_volume: 0.7, marquee_enabled: true, tray_enabled: true, max_history: 500, toast_info_secs: 10, toast_warning_secs: 10, toast_critical_secs: 0 },
   dnd: { enabled: false, schedules: [] },
   timer: { pomodoro_work_mins: 25, pomodoro_short_break_mins: 1, pomodoro_long_break_mins: 0, pomodoro_rounds: 4, pomodoro_sound_file: "chime", auto_start_break: false, auto_start_work: false },
-  marquee: { position: "Top", speed: 80, height: 40, font_size: 16, font_family: "sans-serif", icon_before: "", icon_after: "", bg_color: "#1e3a5f", text_color: "#ffffff", opacity: 0.9, duration_secs: 10 },
+  marquee: { position: "Top", speed: 100, height: 40, font_size: 16, font_family: "sans-serif", icon_before: "", icon_after: "", bg_color: "#1e3a5f", text_color: "#ffffff", opacity: 0.9, duration_secs: 30, tracks: 2 },
   hook: { enabled: false, cli_tools: [], approval_timeout_secs: 120, on_stop_sound: true, stop_sound_file: "klaudio-minimal-zen-stop", on_stop_marquee: true, on_notification_sound: true, notification_sound_file: "klaudio-sci-fi-terminal-notification", on_notification_marquee: true, approval_timeout_enabled: false, approval_timeout_sound_enabled: true, approval_timeout_sound_file: "klaudio-retro-8bit-notification" },
   todo: { pull_enabled: false, pull_endpoints: [], push_enabled: false, push_port: 3928 },
 };
@@ -35,7 +35,33 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getConfig().then(setConfig).finally(() => setLoading(false));
+    let cancelled = false;
+    // Retry on failure: in dev mode the webview can reload while the Rust
+    // side is still restarting, and a single failed get_config would
+    // otherwise silently stick the UI on the default (English) config.
+    const load = (attempt: number) => {
+      api
+        .getConfig()
+        .then((c) => {
+          if (!cancelled) {
+            setConfig(c);
+            setLoading(false);
+          }
+        })
+        .catch((e) => {
+          console.warn("get_config failed, retrying:", e);
+          if (cancelled) return;
+          if (attempt < 6) {
+            setTimeout(() => load(attempt + 1), 400);
+          } else {
+            setLoading(false);
+          }
+        });
+    };
+    load(0);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const save = useCallback(async (c: AppConfig) => {

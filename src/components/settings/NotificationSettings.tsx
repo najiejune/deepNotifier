@@ -4,7 +4,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/tauri";
-import { Upload, Volume2 } from "lucide-react";
+import { Upload, Volume2, Bell } from "lucide-react";
 import type { NotificationConfig } from "@/types";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -130,7 +130,51 @@ export function NotificationSettings({ config, onChange }: Props) {
           <p className="text-sm font-medium">{t.settings.notifications.systemTray}</p>
           <p className="text-xs text-text-muted mt-0.5">{t.settings.notifications.systemTrayDesc}</p>
         </div>
-        <Toggle checked={config.tray_enabled} onChange={(v) => onChange({ ...config, tray_enabled: v })} />
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={() => api.previewToast()} title="Preview">
+            <Bell size={12} />
+          </Button>
+          <Toggle checked={config.tray_enabled} onChange={(v) => onChange({ ...config, tray_enabled: v })} />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">{t.settings.notifications.toastInfo}</p>
+          <p className="text-xs text-text-muted mt-0.5">{t.settings.notifications.toastInfoDesc}</p>
+        </div>
+        <Input
+          type="number" min={0}
+          value={config.toast_info_secs}
+          onChange={(e) => onChange({ ...config, toast_info_secs: Math.max(0, Number(e.target.value) || 0) })}
+          className="w-24"
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">{t.settings.notifications.toastWarning}</p>
+          <p className="text-xs text-text-muted mt-0.5">{t.settings.notifications.toastWarningDesc}</p>
+        </div>
+        <Input
+          type="number" min={0}
+          value={config.toast_warning_secs}
+          onChange={(e) => onChange({ ...config, toast_warning_secs: Math.max(0, Number(e.target.value) || 0) })}
+          className="w-24"
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">{t.settings.notifications.toastCritical}</p>
+          <p className="text-xs text-text-muted mt-0.5">{t.settings.notifications.toastCriticalDesc}</p>
+        </div>
+        <Input
+          type="number" min={0}
+          value={config.toast_critical_secs}
+          onChange={(e) => onChange({ ...config, toast_critical_secs: Math.max(0, Number(e.target.value) || 0) })}
+          className="w-24"
+        />
       </div>
 
       <div className="flex items-center justify-between">
