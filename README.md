@@ -1,49 +1,51 @@
 # deepNotifier
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 Notification daemon for developers. Built with Rust + Tauri 2.
 
-## 功能概览
+## Features
 
-| 模块 | 说明 |
-|------|------|
-| **Webhook** | 接收 GitHub / GitLab / Bitbucket / 自定义 webhook 事件 |
-| **Poll** | 定时轮询 HTTP 端点，解析 JSON 通知 |
-| **通知** | 声音、系统原生通知（Windows Toast / macOS / Linux）、滚动字幕 |
-| **勿扰模式** | 定时 DND 计划，按周重复，静音通知 |
-| **番茄钟** | 番茄工作法 + 待办任务，支持远程拉取/推送 |
-| **滚动字幕** | 多显示器支持，弹幕式多轨道（最多 3 条，可配置），多通知排队轮播、Critical 抢占，5 种预设主题，自定义颜色/字体/图标 |
+| Module | Description |
+|--------|-------------|
+| **Webhook** | Receive GitHub / GitLab / Bitbucket / custom webhook events |
+| **Poll** | Periodically poll HTTP endpoints and parse JSON notifications |
+| **Notifications** | Sound, in-app toast popup (Bitbucket style), scrolling marquee |
+| **Do Not Disturb** | Scheduled DND plans, weekly repeat, mutes notifications |
+| **Pomodoro** | Pomodoro timer + todo tasks, with remote pull/push sync |
+| **Marquee** | Multi-monitor support, danmaku-style multi-track (up to 3, configurable), queueing with Critical preemption, 5 preset themes, custom colors/fonts/icons |
 
-## 环境要求
+## Requirements
 
 - **Node.js** >= 18
-- **Rust** 最新稳定版
-- **Windows**: Visual Studio Build Tools（C++ 桌面开发）
+- **Rust** latest stable
+- **Windows**: Visual Studio Build Tools (Desktop development with C++)
 - **macOS**: Xcode Command Line Tools
-- **Linux**: `libwebkit2gtk`、`libgtk-3-dev`
+- **Linux**: `libwebkit2gtk`, `libgtk-3-dev`
 
-## 快速开始
+## Quick Start
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-## 使用指南
+## Usage
 
 ### Webhook
 
-本地 HTTP 服务器接收平台 webhook 事件，自动转换为通知。
+A local HTTP server receives platform webhook events and converts them into notifications.
 
-**默认端口**: `3927`
+**Default port**: `3927`
 
-| 平台 | 端点 | 验证方式 |
-|------|------|----------|
+| Platform | Endpoint | Verification |
+|----------|----------|--------------|
 | GitHub | `POST /webhook/github` | HMAC-SHA256 (`X-Hub-Signature-256`) |
 | GitLab | `POST /webhook/gitlab` | Token (`X-Gitlab-Token`) |
 | Bitbucket | `POST /webhook/bitbucket` | HMAC-SHA256 (`X-Hub-Signature-256`) |
-| 自定义 | `POST /webhook/custom` | 无 |
+| Custom | `POST /webhook/custom` | None |
 
-**自定义 Webhook** 发送任意 JSON，通过点分隔路径提取字段：
+**Custom Webhook** — send any JSON, extract fields via dot-separated paths:
 
 ```bash
 curl -X POST http://localhost:3927/webhook/custom \
@@ -51,72 +53,80 @@ curl -X POST http://localhost:3927/webhook/custom \
   -d '{"title": "Deploy finished", "body": "Build #42 passed", "severity": "Info"}'
 ```
 
-可配置 JSON 路径（如 `repository.full_name`）和严重性等级（Info / Warning / Critical）。
+Configurable JSON paths (e.g. `repository.full_name`) and severity levels (Info / Warning / Critical).
 
-### Poll 轮询
+### Poll
 
-定时 GET/POST 指定端点，解析响应中的 JSON 通知。支持自定义请求头、请求体、轮询间隔和超时时间。
+Periodically GET/POST an endpoint and parse JSON notifications from the response. Supports custom headers, request body, interval and timeout.
 
-### 通知方式
+### Notification Channels
 
-| 方式 | 说明 |
-|------|------|
-| **声音** | 内置 ping / chime 音效，支持导入自定义音频 |
-| **系统通知** | Windows Toast / macOS 横幅 / Linux libnotify 气泡 |
-| **滚动字幕** | 屏幕顶部/底部滚动条，弹幕式多轨道（1~3 条可配，默认 2 条），多通知排队轮播、Critical 抢占，多显示器同步，5 种预设主题 |
+| Channel | Description |
+|---------|-------------|
+| **Sound** | Built-in ping / chime sounds, custom audio import supported |
+| **Toast popup** | In-app Bitbucket-style toast card rendered at the corner of the work area (never covers the taskbar), semi-transparent (reuses the marquee opacity), pure SVG severity icons, queued display |
+| **Marquee** | Top/bottom scrolling bar, danmaku-style multi-track (1–3 tracks, default 2), queueing with Critical preemption, synced across monitors, 5 preset themes |
 
-### 勿扰模式 (DND)
+**Toast duration is configurable per severity** (Settings → Notification):
 
-- 手动开关 + 定时计划
-- 按周重复，每日多时段
-- 可分别关闭声音、字幕、系统通知
+| Severity | Duration |
+|----------|----------|
+| Info | `toast_info_secs` seconds (default 10) |
+| Warning | `toast_warning_secs` seconds (default 10) |
+| Critical | `toast_critical_secs` seconds (default 0) |
 
-### 番茄钟
+Set any of them to `0` to make that level **stay until manually dismissed**.
 
-1. 在"待办任务"页添加任务和截止日期
-2. 为每个任务配置独立的工作时长、休息时长和轮次
-3. 开始专注计时，完成后自动记录番茄数
+### Do Not Disturb (DND)
 
-### 滚动字幕
+- Manual toggle + scheduled plans
+- Weekly repeat, multiple time ranges per day
+- All channels (sound, marquee, toast) are muted together; notifications are still received and recorded
 
-5 种预设主题：
+### Pomodoro
 
-| 主题 | 风格 |
-|------|------|
-| **Poster** | 深色底 + 红色字，Impact 字体 |
-| **Anime** | 紫色底 + 金色字，趣味字体 |
-| **Business** | 深蓝底 + 白字，衬线字体 |
-| **Kawaii** | 粉色底 + 品红字，手写字体 |
-| **Transparent** | 透明底 + 白字，极简 |
+1. Add tasks with due dates on the "Todo" page
+2. Configure work/break duration and rounds per task
+3. Start focusing; completed sessions are recorded automatically
 
-可自定义：位置（顶部/底部）、轨道数、速度、高度、字号、字体、前置/后置图标、背景色、文字色、背景透明度、显示时长。
+### Marquee Themes
 
-## 构建打包
+| Theme | Style |
+|-------|-------|
+| **Poster** | Dark background + red text, Impact font |
+| **Anime** | Purple background + gold text, playful font |
+| **Business** | Deep blue background + white text, serif font |
+| **Kawaii** | Pink background + magenta text, handwriting font |
+| **Transparent** | Transparent background + white text, minimal |
+
+Customizable: position (top/bottom), track count, speed, height, font size, font family, prefix/suffix icons, background color, text color, background opacity, display duration.
+
+## Build
 
 ```bash
-# TypeScript 类型检查 + Vite 构建
+# TypeScript type check + Vite build
 npm run build
 
-# 生成当前平台安装包
+# Build installer for the current platform
 npm run tauri build
 
-# 仅编译二进制
+# Compile binary only
 npm run tauri build -- --bundles none
 
-# 指定打包格式
+# Specific bundle format
 npm run tauri build -- --bundles msi
 ```
 
-产物路径：`src-tauri/target/release/bundle/`
+Artifacts: `src-tauri/target/release/bundle/`
 
-| 平台 | 产物 |
-|------|------|
+| Platform | Artifacts |
+|----------|-----------|
 | Windows | `.msi` / `.nsis.exe` |
 | macOS | `.dmg` / `.app` |
 | Linux | `.deb` / `.rpm` / `.AppImage` |
 
-## 技术栈
+## Tech Stack
 
-- **前端**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4
-- **后端**: Rust + Tauri 2 + axum + tokio
-- **插件**: tauri-plugin-notification, tauri-plugin-shell, tauri-plugin-dialog
+- **Frontend**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4
+- **Backend**: Rust + Tauri 2 + axum + tokio
+- **Plugins**: tauri-plugin-notification, tauri-plugin-shell, tauri-plugin-dialog
