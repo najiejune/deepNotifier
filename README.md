@@ -60,6 +60,18 @@ Configurable JSON paths (e.g. `repository.full_name`) and severity levels (Info 
 
 Periodically GET/POST an endpoint and parse JSON notifications from the response. Supports custom headers, request body, interval and timeout.
 
+### CLI Hook
+
+Injects hooks into CLI AI assistants (Claude Code, Codex, OpenCode, Gemini CLI, Kiro, CodeBuddy, Qoder, Kimi Code) so their events become notifications. Configure under **Settings → CLI Hook**: enable hook injection, set the webhook port, then install hooks per tool (or batch via "Install All Enabled").
+
+| Alert | Trigger |
+|-------|---------|
+| **Stop** | The CLI finishes a turn |
+| **Notification** | The CLI raises a notification needing attention |
+| **Approval timeout** | An approval stays pending longer than the configured seconds |
+
+Each event can independently toggle sound and marquee channels.
+
 ### Notification Channels
 
 | Channel | Description |

@@ -60,6 +60,18 @@ curl -X POST http://localhost:3927/webhook/custom \
 
 定时 GET/POST 指定端点，解析响应中的 JSON 通知。支持自定义请求头、请求体、轮询间隔和超时时间。
 
+### CLI Hook
+
+向 CLI AI 辅助工具（Claude Code、Codex、OpenCode、Gemini CLI、Kiro、CodeBuddy、Qoder、Kimi Code）注入 hook，让它们的事件变成通知。在 **设置 → CLI Hook** 中配置：启用 Hook 注入、设置 Webhook 端口，然后按工具安装 hook（或用「安装所有已启用」批量操作）。
+
+| 提醒 | 触发时机 |
+|------|----------|
+| **停止** | CLI 一轮任务执行完毕时 |
+| **通知** | CLI 发出通知、需要关注时 |
+| **审批超时** | 审批等待超过配置的秒数未处理时 |
+
+每个事件可独立开关声音和滚动字幕通道。
+
 ### 通知方式
 
 | 方式 | 说明 |
