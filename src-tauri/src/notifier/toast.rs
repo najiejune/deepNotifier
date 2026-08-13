@@ -98,7 +98,52 @@ impl ToastDurations {
 pub const WIDTH_LOGICAL: f64 = 380.0;
 pub const CARD_H_LOGICAL: f64 = 92.0;
 pub const GAP_LOGICAL: f64 = 8.0;
+/// Transparent padding inside the window on every side. Only needs to keep
+/// the card's rounded corners clear of the window edge (Windows rounds
+/// transparent window corners). No box-shadow is used on the cards: a shadow
+/// reaching the window edge is clipped flat and shows as a faint second
+/// rectangle around the card — and a large padded window would swallow
+/// clicks meant for the windows beneath it.
+pub const PAD_LOGICAL: f64 = 8.0;
 const MARGIN_LOGICAL: f64 = 12.0;
+
+/// Strip residual frame styles from the toast window. Undecorated windows
+/// keep WS_CAPTION-adjacent styles; dropping the style bits removes the
+/// invisible resize borders, so force_geometry's side-border compensation
+/// simply measures 0. (The DWM undecorated shadow — a hard-edged rectangle
+/// on old Windows builds — is disabled at creation via `.shadow(false)`;
+/// DWMWA_NCRENDERING_POLICY was tried and rejected: it kills the glass frame
+/// Tauri's transparent windows composite through, leaving an opaque window.)
+#[cfg(target_os = "windows")]
+pub fn strip_window_frame(window: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let hwnd = HWND(hwnd.0 as *mut core::ffi::c_void);
+    unsafe {
+        let style = GetWindowLongW(hwnd, GWL_STYLE);
+        let new_style = style & !((WS_BORDER.0 | WS_DLGFRAME.0 | WS_THICKFRAME.0) as i32);
+        SetWindowLongW(hwnd, GWL_STYLE, new_style);
+        let exstyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        let new_exstyle = exstyle
+            & !((WS_EX_WINDOWEDGE.0
+                | WS_EX_DLGMODALFRAME.0
+                | WS_EX_STATICEDGE.0
+                | WS_EX_CLIENTEDGE.0) as i32);
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new_exstyle);
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+    }
+}
 
 struct Queue {
     visible: VecDeque<ToastItem>,
@@ -444,10 +489,14 @@ fn place_bottom_right(window: &tauri::WebviewWindow, count: usize) {
         return;
     };
     let scale = mon.scale_factor();
-    let w = (WIDTH_LOGICAL * scale).round() as i32;
-    let h = ((CARD_H_LOGICAL * count as f64 + GAP_LOGICAL * (count - 1) as f64) * scale).round()
-        as i32;
+    let w = ((WIDTH_LOGICAL + 2.0 * PAD_LOGICAL) * scale).round() as i32;
+    let h = ((CARD_H_LOGICAL * count as f64
+        + GAP_LOGICAL * (count - 1) as f64
+        + 2.0 * PAD_LOGICAL)
+        * scale)
+        .round() as i32;
     let margin = (MARGIN_LOGICAL * scale).round() as i32;
+    let pad = (PAD_LOGICAL * scale).round() as i32;
     // Bottom-right of the work area (taskbar excluded) when available,
     // falling back to raw monitor bounds on other platforms.
     #[cfg(target_os = "windows")]
@@ -461,8 +510,11 @@ fn place_bottom_right(window: &tauri::WebviewWindow, count: usize) {
             mon.position().y + mon.size().height as i32,
         ),
     };
-    let x = right - w - margin;
-    let y = bottom - h - margin;
+    // The window is larger than the cards by PAD on every side; shift the
+    // origin up-left so the cards (not the window) keep the visual margin
+    // from the work-area corner.
+    let x = right - w - margin + pad;
+    let y = bottom - h - margin + pad;
     crate::notifier::marquee::force_geometry(window, x, y, w as u32, h as u32);
 }
 

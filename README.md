@@ -10,6 +10,7 @@ Notification daemon for developers. Built with Rust + Tauri 2.
 |--------|-------------|
 | **Webhook** | Receive GitHub / GitLab / Bitbucket / custom webhook events |
 | **Poll** | Periodically poll HTTP endpoints and parse JSON notifications |
+| **CLI Hook** | Inject hooks into CLI AI assistants (Claude Code, Codex, Kimi Code, etc.) — get turn-finished, notification and approval-timeout alerts |
 | **Notifications** | Sound, in-app toast popup (Bitbucket style), scrolling marquee |
 | **Do Not Disturb** | Scheduled DND plans, weekly repeat, mutes notifications |
 | **Pomodoro** | Pomodoro timer + todo tasks, with remote pull/push sync |

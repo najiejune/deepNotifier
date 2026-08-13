@@ -21,6 +21,12 @@ interface ToastSnapshot {
 // window to exactly fit N cards of these dimensions.
 const CARD_H = 92;
 const GAP = 8;
+// Transparent padding around the cards; the backend enlarges the window by
+// the same amount. Only needs to protect the rounded corners from being
+// clipped by the window edge (Windows rounds transparent window corners).
+// No box-shadow by design: a shadow extending past the window edge gets
+// clipped flat and shows as a faint second rectangle around the card.
+const PAD = 8;
 
 // Atlassian / Bitbucket icon colors per severity.
 const SEVERITY_STYLE: Record<Severity, { icon: string }> = {
@@ -76,9 +82,8 @@ function ToastCard({ toast, opacity }: { toast: ToastItemView; opacity: number }
         width: "100%",
         height: CARD_H,
         backgroundColor: cardBg(opacity),
-        border: "1px solid rgba(9, 30, 66, 0.12)",
+        border: "1px solid rgba(9, 30, 66, 0.14)",
         borderRadius: 8,
-        boxShadow: "0 6px 20px rgba(9, 30, 66, 0.16)",
         display: "flex",
         alignItems: "flex-start",
         gap: 10,
@@ -194,6 +199,7 @@ function Toasts() {
         display: "flex",
         flexDirection: "column",
         gap: GAP,
+        padding: PAD,
       }}
     >
       {toasts.map((t) => (

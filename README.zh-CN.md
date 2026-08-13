@@ -10,6 +10,7 @@
 |------|------|
 | **Webhook** | 接收 GitHub / GitLab / Bitbucket / 自定义 webhook 事件 |
 | **Poll** | 定时轮询 HTTP 端点，解析 JSON 通知 |
+| **CLI Hook** | 向 CLI AI 辅助工具（Claude Code、Codex、Kimi Code 等）注入 hook，接收任务完成、通知、审批超时提醒 |
 | **通知** | 声音、应用内弹窗（Bitbucket 风格）、滚动字幕 |
 | **勿扰模式** | 定时 DND 计划，按周重复，静音通知 |
 | **番茄钟** | 番茄工作法 + 待办任务，支持远程拉取/推送 |

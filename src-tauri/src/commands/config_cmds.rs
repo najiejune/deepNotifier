@@ -3,6 +3,23 @@ use crate::config::schema::AppConfig;
 use crate::state::AppState;
 use std::net::UdpSocket;
 use tauri::{AppHandle, State};
+use tauri_plugin_autostart::ManagerExt;
+
+/// Apply the run-on-startup setting to the OS auto-launch registration.
+fn apply_autostart(app: &AppHandle, enabled: bool) {
+    let autostart = app.autolaunch();
+    if autostart.is_enabled().unwrap_or(false) == enabled {
+        return;
+    }
+    let r = if enabled {
+        autostart.enable()
+    } else {
+        autostart.disable()
+    };
+    if let Err(e) = r {
+        tracing::warn!("Failed to update autostart registration: {}", e);
+    }
+}
 
 #[tauri::command]
 pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
@@ -24,6 +41,7 @@ pub async fn save_config(
     let language_changed = old_language != config.general.language;
 
     persistence::save(&state.config_dir, &config);
+    apply_autostart(&app, config.general.run_on_startup);
     let mut current = state.config.write().await;
     *current = config;
     drop(current);
@@ -40,9 +58,13 @@ pub async fn save_config(
 }
 
 #[tauri::command]
-pub async fn reset_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
+pub async fn reset_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppConfig, String> {
     let config = AppConfig::default();
     persistence::save(&state.config_dir, &config);
+    apply_autostart(&app, config.general.run_on_startup);
     let mut current = state.config.write().await;
     *current = config.clone();
     Ok(config)

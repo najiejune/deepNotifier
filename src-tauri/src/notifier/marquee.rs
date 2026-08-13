@@ -484,8 +484,12 @@ fn place_on_monitor(
 ) {
     // cfg.height is logical; convert to physical pixels on this monitor
     let bar_h = (cfg.height as f64 * active_tracks.max(1) as f64 * scale).round() as i32;
+    // The gap below the top edge is a FIXED one-track height: it must not
+    // scale with bar_h, or track 0 visibly shifts downward every time a
+    // second track becomes active.
+    let top_gap = (cfg.height as f64 * scale).round() as i32;
     let y = match cfg.position {
-        MarqueePosition::Top => origin.y + bar_h,
+        MarqueePosition::Top => origin.y + top_gap,
         MarqueePosition::Bottom => origin.y + screen.height as i32 - bar_h,
     };
     // The static window from tauri.conf.json is fixed at 1920 logical px,

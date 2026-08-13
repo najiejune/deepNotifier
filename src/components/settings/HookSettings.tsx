@@ -25,6 +25,66 @@ const CLI_VENDORS: Record<string, string> = {
   kimi: "Moonshot AI",
 };
 
+/** Sound file select + preview button, shared by the event cards. */
+function SoundPicker({
+  value,
+  sounds,
+  onChange,
+}: {
+  value: string;
+  sounds: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-[11px] font-mono bg-white border border-border-subtle rounded-sm px-2 py-1.5 text-text-secondary w-32"
+      >
+        {sounds.map((s) => <option key={s} value={s}>{s}</option>)}
+        {!sounds.includes(value) && (
+          <option value={value}>{value}</option>
+        )}
+      </select>
+      <Button size="sm" variant="ghost" onClick={() => api.previewSound(value)} title="Preview">
+        <Volume2 size={12} />
+      </Button>
+    </div>
+  );
+}
+
+/** One hook event: a title row stating when it fires, plus its option rows. */
+function EventGroup({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-text-muted mt-0.5">{desc}</p>
+      </div>
+      <div className="ml-4 space-y-2">{children}</div>
+    </div>
+  );
+}
+
+/** One option row inside an EventGroup: label left, control right. */
+function OptionRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <p className="text-sm text-text-secondary">{label}</p>
+      <div className="flex items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
 export function HookSettings({ config, onChange }: Props) {
   const t = useI18n();
   const [results, setResults] = useState<HookInstallResult[] | null>(null);
@@ -102,7 +162,7 @@ export function HookSettings({ config, onChange }: Props) {
       {/* Master Enable */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">{t.settings.hook.enable}</p>
+          <p className="text-sm font-medium text-text">{t.settings.hook.enable}</p>
           <p className="text-xs text-text-muted mt-0.5">{t.settings.hook.enableDesc}</p>
         </div>
         <Toggle
@@ -113,190 +173,158 @@ export function HookSettings({ config, onChange }: Props) {
 
       {config.enabled && (
         <>
-          {/* Approval Timeout */}
-          <div>
-            <p className="text-[10px] font-medium text-text-muted mb-1">{t.settings.hook.approvalTimeout}</p>
-            <Input
-              type="number"
-              value={String(config.approval_timeout_secs)}
-              onChange={(e) => onChange({ ...config, approval_timeout_secs: Number(e.target.value) || 120 })}
-              className="font-mono text-xs"
-            />
-            <p className="text-[9px] text-text-muted mt-0.5">{t.settings.hook.approvalTimeoutDesc}</p>
-          </div>
+          <div className="border-t border-border-subtle" />
 
-          {/* Shared Hook Notification Settings */}
-          <div className="space-y-3 border border-border-subtle rounded-sm p-3 bg-white/50">
-            <p className="text-[10px] font-mono text-text-muted uppercase tracking-wider">{t.settings.notifications.sound} & {t.settings.hook.marquee}</p>
+          {/* Per-event notification options */}
+          <div className="space-y-4">
+            <p className="text-base font-medium text-text">
+              {t.settings.hook.eventNotifications}
+            </p>
 
             {/* Stop Event */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-medium text-text-muted">{t.settings.hook.events}: {t.settings.hook.stopEvent}</p>
-              <div className="flex items-center gap-4 ml-1 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                  <Toggle
-                    checked={config.on_stop_sound}
-                    onChange={(v) => patchHook({ on_stop_sound: v })}
-                  />
-                  {t.settings.hook.sound}
-                </label>
+            <EventGroup
+              title={t.settings.hook.stopEvent}
+              desc={t.settings.hook.stopEventDesc}
+            >
+              <OptionRow label={t.settings.hook.sound}>
                 {config.on_stop_sound && (
-                  <div className="flex items-center gap-1">
-                    <select
-                      value={config.stop_sound_file}
-                      onChange={(e) => patchHook({ stop_sound_file: e.target.value })}
-                      className="text-[10px] font-mono bg-white border border-border-subtle rounded-sm px-1.5 py-0.5 text-text-secondary w-36"
-                    >
-                      {sounds.map((s) => <option key={s} value={s}>{s}</option>)}
-                      {!sounds.includes(config.stop_sound_file) && (
-                        <option value={config.stop_sound_file}>{config.stop_sound_file}</option>
-                      )}
-                    </select>
-                    <Button size="sm" variant="ghost" onClick={() => api.previewSound(config.stop_sound_file)} title="Preview">
-                      <Volume2 size={12} />
-                    </Button>
-                  </div>
-                )}
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                  <Toggle
-                    checked={config.on_stop_marquee}
-                    onChange={(v) => patchHook({ on_stop_marquee: v })}
+                  <SoundPicker
+                    value={config.stop_sound_file}
+                    sounds={sounds}
+                    onChange={(v) => patchHook({ stop_sound_file: v })}
                   />
-                  {t.settings.hook.marquee}
-                </label>
-              </div>
-            </div>
+                )}
+                <Toggle
+                  checked={config.on_stop_sound}
+                  onChange={(v) => patchHook({ on_stop_sound: v })}
+                />
+              </OptionRow>
+              <OptionRow label={t.settings.hook.marquee}>
+                <Toggle
+                  checked={config.on_stop_marquee}
+                  onChange={(v) => patchHook({ on_stop_marquee: v })}
+                />
+              </OptionRow>
+            </EventGroup>
 
             {/* Notification Event */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-medium text-text-muted">{t.settings.hook.events}: {t.settings.hook.notificationEvent}</p>
-              <div className="flex items-center gap-4 ml-1 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                  <Toggle
-                    checked={config.on_notification_sound}
-                    onChange={(v) => patchHook({ on_notification_sound: v })}
-                  />
-                  {t.settings.hook.sound}
-                </label>
+            <EventGroup
+              title={t.settings.hook.notificationEvent}
+              desc={t.settings.hook.notificationEventDesc}
+            >
+              <OptionRow label={t.settings.hook.sound}>
                 {config.on_notification_sound && (
-                  <div className="flex items-center gap-1">
-                    <select
-                      value={config.notification_sound_file}
-                      onChange={(e) => patchHook({ notification_sound_file: e.target.value })}
-                      className="text-[10px] font-mono bg-white border border-border-subtle rounded-sm px-1.5 py-0.5 text-text-secondary w-36"
-                    >
-                      {sounds.map((s) => <option key={s} value={s}>{s}</option>)}
-                      {!sounds.includes(config.notification_sound_file) && (
-                        <option value={config.notification_sound_file}>{config.notification_sound_file}</option>
-                      )}
-                    </select>
-                    <Button size="sm" variant="ghost" onClick={() => api.previewSound(config.notification_sound_file)} title="Preview">
-                      <Volume2 size={12} />
-                    </Button>
-                  </div>
+                  <SoundPicker
+                    value={config.notification_sound_file}
+                    sounds={sounds}
+                    onChange={(v) => patchHook({ notification_sound_file: v })}
+                  />
                 )}
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                  <Toggle
-                    checked={config.on_notification_marquee}
-                    onChange={(v) => patchHook({ on_notification_marquee: v })}
-                  />
-                  {t.settings.hook.marquee}
-                </label>
-              </div>
-            </div>
+                <Toggle
+                  checked={config.on_notification_sound}
+                  onChange={(v) => patchHook({ on_notification_sound: v })}
+                />
+              </OptionRow>
+              <OptionRow label={t.settings.hook.marquee}>
+                <Toggle
+                  checked={config.on_notification_marquee}
+                  onChange={(v) => patchHook({ on_notification_marquee: v })}
+                />
+              </OptionRow>
+            </EventGroup>
 
-            {/* Approval Timeout */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-medium text-text-muted">{t.settings.hook.approvalTimeoutSetting}</p>
-              <div className="ml-1 space-y-2">
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                  <Toggle
-                    checked={config.approval_timeout_enabled}
-                    onChange={(v) => patchHook({ approval_timeout_enabled: v })}
-                  />
-                  {t.settings.hook.approvalTimeoutDesc}
-                </label>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-                    <Toggle
-                      checked={config.approval_timeout_sound_enabled}
-                      onChange={(v) => patchHook({ approval_timeout_sound_enabled: v })}
-                    />
-                    {t.settings.hook.sound}
-                  </label>
-                  {config.approval_timeout_sound_enabled && (
-                    <div className="flex items-center gap-1">
-                      <select
-                        value={config.approval_timeout_sound_file}
-                        onChange={(e) => patchHook({ approval_timeout_sound_file: e.target.value })}
-                        className="text-[10px] font-mono bg-white border border-border-subtle rounded-sm px-1.5 py-0.5 text-text-secondary w-36"
-                      >
-                        {sounds.map((s) => <option key={s} value={s}>{s}</option>)}
-                        {!sounds.includes(config.approval_timeout_sound_file) && (
-                          <option value={config.approval_timeout_sound_file}>{config.approval_timeout_sound_file}</option>
-                        )}
-                      </select>
-                      <Button size="sm" variant="ghost" onClick={() => api.previewSound(config.approval_timeout_sound_file)} title="Preview">
-                        <Volume2 size={12} />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleInstall}
-              disabled={installing}
-              className="px-3 py-1.5 text-xs bg-accent text-white rounded-sm hover:bg-accent/90 disabled:opacity-50"
-            >
-              {installing ? "..." : t.settings.hook.installAll}
-            </button>
-            <button
-              onClick={() => { if (window.confirm(t.settings.hook.uninstallAllConfirm)) handleUninstall(); }}
-              disabled={installing}
-              className="px-3 py-1.5 text-xs border border-border-subtle rounded-sm hover:bg-white disabled:opacity-50"
-            >
-              {t.settings.hook.uninstallAll}
-            </button>
-          </div>
+          <div className="border-t border-border-subtle" />
 
-          {/* Install Results */}
-          {results && (
-            <div className="space-y-1">
-              {results.map((r, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "text-xs px-2.5 py-1.5 rounded-sm border",
-                    r.success ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800",
-                  )}
-                >
-                  <span className="font-medium">{r.cli_id}</span>: {r.message}
-                  {r.events_injected.length > 0 && (
-                    <span className="text-text-muted"> — {r.events_injected.join(", ")}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Approval Timeout Alert */}
+          <EventGroup
+            title={t.settings.hook.approvalTimeoutSetting}
+            desc={t.settings.hook.approvalTimeoutDesc}
+          >
+            <OptionRow label={t.settings.hook.approvalTimeout}>
+              <Input
+                type="number"
+                min={0}
+                value={config.approval_timeout_secs}
+                onChange={(e) => onChange({ ...config, approval_timeout_secs: Math.max(0, Number(e.target.value) || 120) })}
+                className="w-24"
+              />
+            </OptionRow>
+            <OptionRow label={t.settings.hook.approvalTimeoutEnable}>
+              <Toggle
+                checked={config.approval_timeout_enabled}
+                onChange={(v) => patchHook({ approval_timeout_enabled: v })}
+              />
+            </OptionRow>
+            {config.approval_timeout_enabled && (
+              <OptionRow label={t.settings.hook.sound}>
+                {config.approval_timeout_sound_enabled && (
+                  <SoundPicker
+                    value={config.approval_timeout_sound_file}
+                    sounds={sounds}
+                    onChange={(v) => patchHook({ approval_timeout_sound_file: v })}
+                  />
+                )}
+                <Toggle
+                  checked={config.approval_timeout_sound_enabled}
+                  onChange={(v) => patchHook({ approval_timeout_sound_enabled: v })}
+                />
+              </OptionRow>
+            )}
+          </EventGroup>
+
+          <div className="border-t border-border-subtle" />
 
           {/* CLI Tools List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-mono text-text-muted uppercase tracking-wider">
+              <p className="text-base font-medium text-text">
                 {t.settings.hook.cliTools}
               </p>
-              <button
-                onClick={refreshCliStatus}
-                className="text-[10px] text-text-muted hover:text-text underline underline-offset-2"
-              >
-                {"↻"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleInstall}
+                  disabled={installing}
+                  className="px-3 py-1.5 text-xs bg-accent text-white rounded-sm hover:bg-accent/90 disabled:opacity-50"
+                >
+                  {installing ? "..." : t.settings.hook.installAll}
+                </button>
+                <button
+                  onClick={() => { if (window.confirm(t.settings.hook.uninstallAllConfirm)) handleUninstall(); }}
+                  disabled={installing}
+                  className="px-3 py-1.5 text-xs border border-border-subtle rounded-sm hover:bg-white disabled:opacity-50"
+                >
+                  {t.settings.hook.uninstallAll}
+                </button>
+                <button
+                  onClick={refreshCliStatus}
+                  className="text-[10px] text-text-muted hover:text-text underline underline-offset-2"
+                >
+                  {"↻"}
+                </button>
+              </div>
             </div>
+
+            {/* Install Results */}
+            {results && (
+              <div className="space-y-1">
+                {results.map((r, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "text-xs px-2.5 py-1.5 rounded-sm border",
+                      r.success ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800",
+                    )}
+                  >
+                    <span className="font-medium">{r.cli_id}</span>: {r.message}
+                    {r.events_injected.length > 0 && (
+                      <span className="text-text-muted"> — {r.events_injected.join(", ")}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {config.cli_tools.map((tool) => (
               <div
@@ -321,7 +349,7 @@ export function HookSettings({ config, onChange }: Props) {
                     </p>
                   </div>
                   {/* Status badges */}
-                  <span className="flex items-center gap-2 text-[10px] font-mono">
+                  <span className="flex items-center gap-2 text-[10px]">
                     <span className={cn(
                       "px-1.5 py-0.5 rounded-sm",
                       cliStatuses[tool.id] ? "text-green-600 bg-green-50" : "text-text-muted/50 bg-gray-50",

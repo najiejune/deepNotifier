@@ -26,6 +26,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Initialize app state
@@ -39,6 +43,24 @@ pub fn run() {
             notifier::embedded_sounds::extract_to(&config_dir.join("sounds"));
 
             let app_config = config::persistence::load_or_create(&config_dir);
+
+            // Sync the OS auto-launch registration with the saved setting
+            // (e.g. after a reinstall the registry entry may be missing).
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                let want = app_config.general.run_on_startup;
+                if autostart.is_enabled().unwrap_or(false) != want {
+                    let r = if want {
+                        autostart.enable()
+                    } else {
+                        autostart.disable()
+                    };
+                    if let Err(e) = r {
+                        tracing::warn!("Failed to sync autostart registration: {}", e);
+                    }
+                }
+            }
             let (tx, rx) = tokio::sync::mpsc::channel::<notifier::dispatcher::NotificationEvent>(256);
 
             let todo_store = todo::store::TodoStore::new(&config_dir);
@@ -48,6 +70,7 @@ pub fn run() {
             // kept visible so WebView2 never suspends their pages
             // (see notifier::marquee::PARK_POS).
             if let Some(marquee_win) = app.get_webview_window("marquee") {
+                notifier::toast::strip_window_frame(&marquee_win);
                 let _ = marquee_win.set_ignore_cursor_events(true);
                 let _ = marquee_win.show();
             }
@@ -97,6 +120,7 @@ pub fn run() {
                     // If a machine ever shows only a bare frame here, revert
                     // to `.transparent(false)`.
                     .transparent(true)
+                    .shadow(false)
                     .always_on_top(true)
                     .skip_taskbar(true)
                     .visible(false)
@@ -106,6 +130,7 @@ pub fn run() {
                     match builder.build() {
                         Ok(win) => {
                             tracing::info!("Created marquee window '{}' at {:?}", label, pos);
+                            notifier::toast::strip_window_frame(&win);
                             let _ = win.set_ignore_cursor_events(true);
                             // Move it onto its own monitor first (physical
                             // coords) so it adopts that monitor's DPI context.
@@ -137,11 +162,14 @@ pub fn run() {
             )
             .title("")
             .inner_size(
-                notifier::toast::WIDTH_LOGICAL,
-                notifier::toast::CARD_H_LOGICAL,
+                notifier::toast::WIDTH_LOGICAL + 2.0 * notifier::toast::PAD_LOGICAL,
+                notifier::toast::CARD_H_LOGICAL + 2.0 * notifier::toast::PAD_LOGICAL,
             )
             .decorations(false)
             .transparent(true)
+            // No DWM undecorated shadow: on old Windows builds (Win10 LTSC
+            // 1809) it renders as a hard-edged rectangle around the card.
+            .shadow(false)
             .always_on_top(true)
             .skip_taskbar(true)
             .visible(false)
@@ -150,6 +178,7 @@ pub fn run() {
             .build()
             {
                 Ok(win) => {
+                    notifier::toast::strip_window_frame(&win);
                     let _ = win.show();
                     notifier::marquee::park_marquee_window(&win);
                     tracing::info!("Created toast window");

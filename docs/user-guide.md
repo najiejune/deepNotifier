@@ -142,6 +142,43 @@ Periodically fetches data from specified HTTP endpoints, detects changes via con
    - **Request Headers**: custom HTTP headers
    - **POST Body**: request payload (for POST method)
 
+### Method 3: CLI Hook (AI Coding Assistants)
+
+Injects hook configurations into CLI AI assistants so their events are pushed to deepNotifier and shown as normal notifications (toast / marquee / sound).
+
+**Supported tools**: Claude Code, Codex, OpenCode, Gemini CLI, Kiro, CodeBuddy, Qoder, Kimi Code.
+
+#### How It Works
+
+1. deepNotifier writes hook entries into each CLI tool's own config file (e.g. `~/.claude/settings.json`, `~/.codex/config.toml`)
+2. When an event fires inside the CLI, the hook POSTs it to `http://localhost:<port>/hook/cli`
+3. deepNotifier turns it into a notification through your configured channels
+
+#### Configuration Steps
+
+1. Go to **Settings → CLI Hook**
+2. Enable "Enable Hook Injection"
+3. Set the **Webhook Port** — the port CLI tools POST notifications to
+4. In the **CLI Tools** list, review detected tools (CLI ✓ = the tool itself is installed, Hook ✓ = hooks already injected), then:
+   - Click **Install** / **Uninstall** on a single tool, or
+   - Use **Install All Enabled** / **Uninstall All** in the header row for batch operations
+5. The tool detail shows its **config file path** and which **events are injected**
+
+#### Event Notifications
+
+Choose which CLI events produce alerts, and through which channels (sound / marquee can be toggled per event):
+
+| Event | When it fires |
+|-------|---------------|
+| **Stop** | The CLI finishes a turn |
+| **Notification** | The CLI raises a notification that needs your attention |
+
+#### Approval Timeout Alert
+
+CLI tools pause and wait for your approval before running commands. Enable "Approval Timeout Alert" and set a duration (seconds): if an approval stays pending longer than that, deepNotifier alerts you.
+
+> Clicking the body of a toast card focuses the terminal the notification came from.
+
 ---
 
 ## Notification Alert Methods
@@ -298,7 +335,7 @@ Go to the **History** page:
 
 - **Search**: search by title or content
 - **Severity filter**: Info / Warning / Critical
-- **Source filter**: GitHub / GitLab / Bitbucket / Custom / Polling Endpoint / Pomodoro
+- **Source filter**: GitHub / GitLab / Bitbucket / Custom / Polling Endpoint / Pomodoro / CLI tools (the list is built dynamically from received notifications)
 - **Date range**: filter by time period
 - **Clear All**: delete all history records
 - **Pagination**: shows the current item count and total item count
