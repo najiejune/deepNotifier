@@ -40,3 +40,13 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Build artifacts (ship via GitHub Releases instead)
+*.apk
+
+# Local screenshots / debugging artifacts
+/shot-*.png
+/toast-*.png
+/.icon-work/
+/winlist.txt
+/toast-test.json
