@@ -138,8 +138,17 @@ Artifacts: `src-tauri/target/release/bundle/`
 | macOS | `.dmg` / `.app` |
 | Linux | `.deb` / `.rpm` / `.AppImage` |
 
+## Mobile (Android / iOS)
+
+The Tauri 2 mobile client connects to an alert server (implemented separately) and receives notifications over **WebSocket (foreground) + FCM/APNs (background)**. Mobile keeps: alert delivery, OS notifications, notification history, Pomodoro/Todo/DND. Desktop-only features (marquee, toast window, CLI Hook) are excluded.
+
+- **Protocol**: [docs/protocol-v1.md](docs/protocol-v1.md) — the client-server contract for your alert server
+- **Demo server**: `cargo run -p dn-core --example demo_server` (local integration only)
+- **Push bridge templates**: [src-tauri/mobile-bridge/README.md](src-tauri/mobile-bridge/README.md) (install after `tauri android/ios init`)
+
 ## Tech Stack
 
 - **Frontend**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4
 - **Backend**: Rust + Tauri 2 + axum + tokio
+- **Shared models/protocol**: `crates/dn-core`
 - **Plugins**: tauri-plugin-notification, tauri-plugin-shell, tauri-plugin-dialog

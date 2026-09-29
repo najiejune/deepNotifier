@@ -6,7 +6,7 @@
 
 deepNotifier is a desktop notification daemon for developers. It receives notifications via Webhooks (push) and polling (pull), and provides three alerting methods: sound, scrolling marquee, and toast popup notifications. Built-in Pomodoro timer and task management help you stay focused without missing important notifications.
 
-**Supported platforms**: Windows / macOS / Linux
+**Supported platforms**: Windows / macOS / Linux / Android (iOS: build it yourself)
 
 ---
 
@@ -379,6 +379,73 @@ Accept pushed todos over HTTP:
 
 ---
 
+## Mobile (Android / iOS)
+
+deepNotifier ships an Android / iOS client that acts as a "pocket receiver", so you get alerts even when away from your desk.
+
+### Feature Scope
+
+The mobile client keeps the core experience:
+
+- Alert receiving (real-time over WebSocket + catch-up after reconnect)
+- System notifications (via the OS notification shade)
+- Notification history
+- Pomodoro timer, todo tasks, Do Not Disturb mode
+
+Desktop-only features are not available on mobile: scrolling marquee, toast popup cards, CLI Hook, custom sounds.
+
+### How It Works
+
+The mobile app actively connects to an alert server you run yourself (protocol: see [protocol-v1.md](protocol-v1.md)):
+
+- **Foreground**: alerts arrive in real time over WebSocket
+- **Background**: alerts arrive via push (FCM on Android / APNs on iOS), so they are delivered even if the app is killed
+
+Protocol outline: `POST /api/v1/devices` to register → WebSocket `/api/v1/ws?token=...` for the live channel → FCM data messages for background push.
+
+### Installation
+
+| Platform | Notes |
+|----------|-------|
+| Android | Dev APK (debug-signed): allows cleartext HTTP for LAN debugging; release builds disallow cleartext HTTP, so the server needs TLS |
+| iOS | Build it yourself on macOS (see the [build guide](build-guide.md)) |
+
+### Connecting to a Server
+
+Go to **Settings → Server Connection**:
+
+1. Enter the **Server URL** — `wss://your-server:port` for public servers, or `http://192.168.x.x:3930` for LAN debugging
+2. Enter your **API Token**
+3. Click "Save & Register"; the status turning "Online" means success
+
+Notes:
+
+- Connection status is shown live; you can disconnect / unregister at any time
+- The app reconnects automatically on launch and when it returns to the foreground
+- The first connection requests the system notification permission (required on Android 13+; without it, no system notifications)
+
+### Local Testing
+
+Run the demo server on your computer (listens on port 3930, accepts any token):
+
+```bash
+cargo run -p dn-core --example demo_server
+```
+
+On the phone, set the server URL to `http://<computerIP>:3930` and enter any token. Then simulate a push with curl:
+
+```bash
+curl -X POST http://<computerIP>:3930/push \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test","body":"Hello mobile","severity":"Info"}'
+```
+
+### Catch-Up After Reconnect
+
+After a successful reconnect, the app automatically pulls messages it missed while offline (up to 200), so nothing is lost.
+
+---
+
 ## Configuration Storage
 
 All configuration is stored in the system application config directory:
@@ -430,3 +497,11 @@ A: Make sure: 1) the webhook server is enabled; 2) the port is not blocked by a 
 ### Q: How do I reset all settings?
 
 A: Go to **Settings** → click "Reset" in the top-right corner → click "Confirm".
+
+### Q: Will I still receive alerts after the app is killed?
+
+A: Yes — as long as the server implements FCM background push and the app has registered and reported its push token. Alerts then arrive via FCM in the system notification shade; tapping the notification brings the app back.
+
+### Q: The connection status stays "Offline"?
+
+A: Check in order: 1) the server URL and API token are correct; 2) the phone and the server can reach each other (same LAN, firewall allows it); 3) you are not using a release build against a cleartext HTTP URL (release builds block cleartext HTTP — use the debug build or configure TLS on the server).
