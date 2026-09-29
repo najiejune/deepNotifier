@@ -1,4 +1,5 @@
 use crate::notifier::dispatcher::NotificationEvent;
+#[cfg(desktop)]
 use crate::notifier::window_focus::{self, FocusDiagnostic};
 use crate::state::AppState;
 use tauri::State;
@@ -26,6 +27,7 @@ pub async fn clear_notifications(state: State<'_, AppState>) -> Result<(), Strin
 
 /// Called when the user clicks a system notification toast.
 /// Focuses the source process window if we stored a PID for the last notification.
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn focus_pending_pid(state: State<'_, AppState>) -> Result<(), String> {
     let pid = {
@@ -44,6 +46,7 @@ pub async fn focus_pending_pid(state: State<'_, AppState>) -> Result<(), String>
 // ── Debug / test commands ──────────────────────────────────────────
 
 /// Test command: try to focus a window for the given PID and return diagnostics.
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn debug_focus_pid(pid: u32) -> Result<FocusDiagnostic, String> {
     tracing::info!(pid, "debug_focus_pid called");
@@ -52,6 +55,7 @@ pub async fn debug_focus_pid(pid: u32) -> Result<FocusDiagnostic, String> {
 }
 
 /// Test command: read the current pending_pid without consuming it.
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn debug_get_pending_pid(state: State<'_, AppState>) -> Result<Option<u32>, String> {
     let guard = state.pending_pid.read().await;

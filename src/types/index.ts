@@ -187,6 +187,24 @@ export interface HookInstallResult {
   events_injected: string[];
 }
 
+export type ServerConnState = "offline" | "connecting" | "online";
+
+export interface ServerConfig {
+  server_url: string;
+  api_token: string;
+  device_id: string;
+  ws_token: string;
+  push_token: string;
+  auto_connect: boolean;
+}
+
+export interface ServerStatus {
+  state: ServerConnState;
+  server_url: string;
+  device_id: string;
+  last_error: string | null;
+}
+
 export interface AppConfig {
   general: GeneralConfig;
   webhook: WebhookConfig;
@@ -197,6 +215,7 @@ export interface AppConfig {
   marquee: MarqueeConfig;
   todo: TodoConfig;
   hook: HookConfig;
+  server: ServerConfig;
 }
 
 export interface NotificationEvent {

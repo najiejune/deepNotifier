@@ -12,9 +12,11 @@ import {
   RotateCcw,
   AlertTriangle,
   Bug,
+  Server,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useConfig } from "@/hooks/useConfig";
+import { usePlatform } from "@/hooks/usePlatform";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/Button";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
@@ -26,6 +28,7 @@ import { PomodoroSettings } from "@/components/settings/PomodoroSettings";
 import { MarqueeSettings } from "@/components/settings/MarqueeSettings";
 import { TodoSettings } from "@/components/settings/TodoSettings";
 import { HookSettings } from "@/components/settings/HookSettings";
+import { ServerSettings } from "@/components/settings/ServerSettings";
 import { DebugFocus } from "@/components/settings/DebugFocus";
 
 type Section =
@@ -38,10 +41,15 @@ type Section =
   | "marquee"
   | "hook"
   | "todo"
+  | "server"
   | "debug";
+
+// Desktop-only sections, hidden on mobile platforms.
+const DESKTOP_ONLY: Section[] = ["marquee", "hook", "debug"];
 
 export function SettingsPage() {
   const { config, loading, update, reset } = useConfig();
+  const { isMobile } = usePlatform();
   const t = useI18n();
   const [activeSection, setActiveSection] = useState<Section>("general");
   const [confirmReset, setConfirmReset] = useState(false);
@@ -54,7 +62,7 @@ export function SettingsPage() {
     );
   }
 
-  const sections: { id: Section; label: string; icon: typeof Globe }[] = [
+  const allSections: { id: Section; label: string; icon: typeof Globe }[] = [
     { id: "general", label: t.settings.sections.general, icon: Globe },
     { id: "webhook", label: t.settings.sections.webhook, icon: Webhook },
     { id: "poll", label: t.settings.sections.poll, icon: Rss },
@@ -64,8 +72,12 @@ export function SettingsPage() {
     { id: "marquee", label: t.settings.sections.marquee, icon: Presentation },
     { id: "hook", label: t.settings.sections.hook, icon: Terminal },
     { id: "todo", label: t.settings.sections.todo, icon: ListTodo },
+    { id: "server", label: t.settings.sections.server, icon: Server },
     { id: "debug", label: "Debug Focus", icon: Bug },
   ];
+  const sections = allSections.filter(
+    (s) => !isMobile || !DESKTOP_ONLY.includes(s.id),
+  );
 
   const renderSection = () => {
     switch (activeSection) {
@@ -132,6 +144,13 @@ export function SettingsPage() {
             onChange={(v) => update("todo", v)}
           />
         );
+      case "server":
+        return (
+          <ServerSettings
+            config={config.server}
+            onChange={(v) => update("server", v)}
+          />
+        );
       case "debug":
         return <DebugFocus />;
     }
@@ -139,7 +158,7 @@ export function SettingsPage() {
 
   return (
     <div className="p-2.5 h-full flex flex-col">
-      <header className="flex items-center justify-between mb-4">
+      <header className="flex items-center justify-between mb-4 max-sm:flex-wrap max-sm:gap-2">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-text">
             {t.settings.title}
@@ -185,14 +204,15 @@ export function SettingsPage() {
         </div>
       </header>
 
-      <div className="flex gap-2 flex-1 overflow-hidden">
-        <div className="w-40 shrink-0 space-y-0.5">
+      <div className="flex gap-2 flex-1 overflow-hidden max-sm:flex-col">
+        <div className="w-40 shrink-0 space-y-0.5 max-sm:w-full max-sm:flex max-sm:space-y-0 max-sm:gap-1 max-sm:overflow-x-auto">
           {sections.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
               className={cn(
                 "w-full flex items-center gap-2.5 px-3 py-2 rounded-sm text-sm transition-all duration-150",
+                "max-sm:w-auto max-sm:shrink-0 max-sm:text-xs max-sm:px-2.5",
                 activeSection === id
                   ? "bg-white text-text border border-border-subtle shadow-sm"
                   : "text-text-secondary hover:text-text hover:bg-white/60 border border-transparent",
@@ -207,7 +227,7 @@ export function SettingsPage() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-auto pr-1">
+        <div className="flex-1 overflow-auto pr-1 max-sm:min-h-0">
           <div className="bg-white border border-border-subtle rounded-md p-5 shadow-sm">
             <h2 className="text-sm font-semibold mb-4 text-text">
               {sections.find((s) => s.id === activeSection)?.label}

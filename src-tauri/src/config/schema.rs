@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub marquee: MarqueeConfig,
     pub todo: TodoConfig,
     pub hook: HookConfig,
+    pub server: ServerConfig,
 }
 
 impl Default for AppConfig {
@@ -27,6 +28,7 @@ impl Default for AppConfig {
             marquee: MarqueeConfig::default(),
             todo: TodoConfig::default(),
             hook: HookConfig::default(),
+            server: ServerConfig::default(),
         }
     }
 }
@@ -443,6 +445,35 @@ impl Default for TodoConfig {
             pull_endpoints: vec![],
             push_enabled: false,
             push_port: 3928,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServerConfig {
+    /// Alert server base URL, e.g. "wss://alert.example.com" or "http://192.168.1.10:3930".
+    pub server_url: String,
+    /// User-level API token issued by the server (docs/protocol-v1.md).
+    pub api_token: String,
+    /// Device credentials obtained from POST /api/v1/devices. Empty = not registered.
+    pub device_id: String,
+    pub ws_token: String,
+    /// Latest FCM/APNs push token, uploaded via POST /api/v1/devices/{id}/push-token.
+    pub push_token: String,
+    /// Connect automatically at startup.
+    pub auto_connect: bool,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            server_url: String::new(),
+            api_token: String::new(),
+            device_id: String::new(),
+            ws_token: String::new(),
+            push_token: String::new(),
+            auto_connect: true,
         }
     }
 }

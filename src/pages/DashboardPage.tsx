@@ -29,7 +29,7 @@ export function DashboardPage() {
 
   return (
     <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-text">
             {t.dashboard.title}

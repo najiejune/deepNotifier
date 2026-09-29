@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { ConfigProvider, useConfig } from "@/hooks/useConfig";
+import { usePushTokenBridge } from "@/hooks/usePushTokenBridge";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -9,6 +10,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 
 function AppInner() {
   const { config, loading } = useConfig();
+  usePushTokenBridge();
 
   if (loading) {
     return (

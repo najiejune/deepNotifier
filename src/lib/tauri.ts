@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppConfig, CliStatus, NotificationEvent, TimerState, TodoItem, HookInstallResult } from "@/types";
+import type { AppConfig, CliStatus, NotificationEvent, ServerStatus, TimerState, TodoItem, HookInstallResult } from "@/types";
 
 export const api = {
   getConfig: () => invoke<AppConfig>("get_config"),
@@ -13,6 +13,7 @@ export const api = {
 
   stopTimer: () => invoke<void>("stop_timer"),
   pauseTimer: () => invoke<void>("pause_timer"),
+  resumeTimer: () => invoke<void>("resume_timer"),
   getTimerState: () => invoke<TimerState>("get_timer_state"),
   startPomodoro: (opts?: {
     work_mins?: number;
@@ -57,6 +58,15 @@ export const api = {
     invoke<CliStatus[]>("check_cli_status"),
 
   focusPendingPid: () => invoke<void>("focus_pending_pid"),
+
+  getMobileServerStatus: () => invoke<ServerStatus>("mobile_server_status"),
+  mobileServerRegister: (serverUrl: string, apiToken: string) =>
+    invoke<void>("mobile_server_register", { serverUrl, apiToken }),
+  mobileServerConnect: () => invoke<void>("mobile_server_connect"),
+  mobileServerDisconnect: () => invoke<void>("mobile_server_disconnect"),
+  mobileServerUnregister: () => invoke<void>("mobile_server_unregister"),
+  mobilePushTokenUpdate: (token: string) =>
+    invoke<void>("mobile_push_token_update", { token }),
 
   // Debug / test
   debugFocusPid: (pid: number) =>

@@ -3,13 +3,16 @@ use axum::http::HeaderMap;
 use axum::Json;
 use serde_json::Value;
 use std::sync::Arc;
+#[cfg(desktop)]
 use std::time::Instant;
 use tracing::{info, warn};
 
 use crate::notifier::dispatcher::NotificationEvent;
 use crate::notifier::dispatcher::NotificationSource;
 use crate::notifier::dispatcher::Severity;
-use crate::state::{AppState, ApprovalSession};
+use crate::state::AppState;
+#[cfg(desktop)]
+use crate::state::ApprovalSession;
 use crate::webhook::bitbucket;
 use crate::webhook::custom;
 use crate::webhook::verify;
@@ -295,6 +298,7 @@ pub async fn custom_handler(
     "OK"
 }
 
+#[cfg(desktop)]
 pub async fn cli_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<Value>,

@@ -12,6 +12,7 @@ const defaultConfig: AppConfig = {
   marquee: { position: "Top", speed: 100, height: 40, font_size: 16, font_family: "sans-serif", icon_before: "", icon_after: "", bg_color: "#1e3a5f", text_color: "#ffffff", opacity: 0.9, duration_secs: 30, tracks: 2 },
   hook: { enabled: false, cli_tools: [], approval_timeout_secs: 120, on_stop_sound: true, stop_sound_file: "klaudio-minimal-zen-stop", on_stop_marquee: true, on_notification_sound: true, notification_sound_file: "klaudio-sci-fi-terminal-notification", on_notification_marquee: true, approval_timeout_enabled: false, approval_timeout_sound_enabled: true, approval_timeout_sound_file: "klaudio-retro-8bit-notification" },
   todo: { pull_enabled: false, pull_endpoints: [], push_enabled: false, push_port: 3928 },
+  server: { server_url: "", api_token: "", device_id: "", ws_token: "", push_token: "", auto_connect: true },
 };
 
 interface ConfigCtx {
@@ -20,6 +21,7 @@ interface ConfigCtx {
   save: (c: AppConfig) => Promise<void>;
   update: <K extends keyof AppConfig>(section: K, value: AppConfig[K]) => void;
   reset: () => Promise<void>;
+  reload: () => Promise<void>;
 }
 
 const ConfigContext = createContext<ConfigCtx>({
@@ -28,6 +30,7 @@ const ConfigContext = createContext<ConfigCtx>({
   save: async () => {},
   update: () => {},
   reset: async () => {},
+  reload: async () => {},
 });
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
@@ -73,7 +76,11 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     <K extends keyof AppConfig>(section: K, value: AppConfig[K]) => {
       setConfig((prev) => {
         const next = { ...prev, [section]: value };
-        api.saveConfig(next);
+        api.saveConfig(next).catch((e) => {
+          // Surface persistence failures instead of letting frontend state
+          // and disk silently diverge.
+          console.error("save_config failed", e);
+        });
         return next;
       });
     },
@@ -85,9 +92,20 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     setConfig(c);
   }, []);
 
+  // Background refresh — keeps the frontend copy in sync with values the
+  // backend changes on its own (e.g. the server section's device_id).
+  const reload = useCallback(async () => {
+    try {
+      const c = await api.getConfig();
+      setConfig(c);
+    } catch {
+      // keep the current config on failure
+    }
+  }, []);
+
   const ctx = useMemo<ConfigCtx>(
-    () => ({ config, loading, save, update, reset }),
-    [config, loading, save, update, reset],
+    () => ({ config, loading, save, update, reset, reload }),
+    [config, loading, save, update, reset, reload],
   );
 
   return (

@@ -36,7 +36,7 @@ export function PomodoroPage() {
   const [dialog, setDialog] = useState<DialogState>(null);
 
   useEffect(() => {
-    const unlisten = onEvent<void>("timer-completed", () => {
+    const unlisten = onEvent<void>("pomodoro-work-completed", () => {
       if (currentTaskId) {
         pomodoroCounts.increment(currentTaskId);
       }
@@ -112,7 +112,7 @@ export function PomodoroPage() {
 
   return (
     <div className="p-5 space-y-4 h-full flex flex-col">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-text">
             {t.pomodoro.title}
@@ -128,7 +128,7 @@ export function PomodoroPage() {
 
       {/* Current task + pomodoro bar */}
       {currentTaskId && timer.timer.status !== "idle" && (
-        <div className="bg-accent-dim border border-accent/20 rounded-sm px-3 py-1.5 flex items-center gap-3">
+        <div className="bg-accent-dim border border-accent/20 rounded-sm px-3 py-1.5 flex flex-wrap items-center gap-3">
           <span className="relative flex h-1.5 w-1.5 shrink-0">
             {isRunning && (
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-tomato opacity-50" />

@@ -97,3 +97,25 @@ body {
 .animate-fade-in {
   animation: fade-in 0.15s ease-out both;
 }
+
+/* Small screens (phones / narrow windows, <640px).
+   Desktop window min size is 864x500, so these rules never affect it. */
+@media (max-width: 639px) {
+  ::-webkit-scrollbar {
+    width: 3px;
+  }
+
+  /* Keep long code snippets (webhook/todo examples) from overflowing */
+  pre,
+  code {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Prevent iOS/WKWebView auto-zoom on input focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

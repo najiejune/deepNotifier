@@ -24,6 +24,10 @@ impl NotificationHistory {
         self.events.iter().rev()
     }
 
+    pub fn contains_id(&self, id: &str) -> bool {
+        self.events.iter().any(|e| e.id == id)
+    }
+
     pub fn clear(&mut self) {
         self.events.clear();
     }

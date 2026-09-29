@@ -1,6 +1,8 @@
 use crate::state::AppState;
-use crate::timer::engine::{TimerMode, TimerState, TimerStatus};
+use crate::timer::engine::{PomodoroPhase, TimerMode, TimerState, TimerStatus};
+use crate::timer::pomodoro::PomodoroMachine;
 use crate::notifier::dispatcher::{NotificationEvent, NotificationSource, Severity};
+use std::sync::atomic::Ordering;
 use tauri::{Emitter, State};
 
 async fn cancel_existing_timer(state: &AppState) {
@@ -9,73 +11,168 @@ async fn cancel_existing_timer(state: &AppState) {
     }
 }
 
-fn spawn_timer_tick(app_handle: tauri::AppHandle, state: AppState) {
+struct PhaseChange {
+    title: String,
+    body: String,
+    /// Session is over — stop the loop after notifying.
+    is_completion: bool,
+    /// A work phase just finished — used by the frontend for pomodoro counting.
+    work_finished: bool,
+}
+
+fn spawn_timer_tick(
+    app_handle: tauri::AppHandle,
+    state: AppState,
+    generation: u64,
+    mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+    mut machine: Option<PomodoroMachine>,
+) {
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
         // skip the first immediate tick
         interval.tick().await;
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = &mut cancel_rx => break,
+                _ = interval.tick() => {}
+            }
 
-            let should_break = {
+            // A newer timer session supersedes this loop (guards the race where
+            // this loop was mid-tick while a new timer was started).
+            if state.timer_generation.load(Ordering::SeqCst) != generation {
+                break;
+            }
+
+            let mut change: Option<PhaseChange> = None;
+            {
                 let mut ts = state.timer_state.write().await;
                 if ts.status != TimerStatus::Running {
-                    // Check if cancelled
-                    let cancelled = state.timer_cancel.read().await.is_none();
-                    if cancelled && ts.status == TimerStatus::Idle {
-                        break;
-                    }
+                    // Paused — wait for resume on the next tick.
                     continue;
                 }
+
                 if ts.remaining_secs > 0 {
                     ts.remaining_secs -= 1;
                     let _ = app_handle.emit("timer-tick", ts.remaining_secs);
-
-                    if ts.remaining_secs == 0 {
-                        ts.status = TimerStatus::Completed;
-                        let _mode = ts.mode.clone();
-                        true // should send notification
-                    } else {
-                        false
-                    }
-                } else {
-                    false
                 }
-            };
 
-            if should_break {
-                // Play sound directly for immediate feedback
+                if ts.remaining_secs == 0 {
+                    match ts.mode {
+                        TimerMode::Countdown => {
+                            ts.status = TimerStatus::Completed;
+                            change = Some(PhaseChange {
+                                title: "Timer Completed".into(),
+                                body: "Time's up!".into(),
+                                is_completion: true,
+                                work_finished: false,
+                            });
+                        }
+                        TimerMode::Pomodoro => {
+                            let finished_work =
+                                matches!(ts.pomodoro_phase, Some(PomodoroPhase::Work));
+                            let session_over = matches!(
+                                ts.pomodoro_phase,
+                                Some(PomodoroPhase::LongBreak) | None
+                            );
+                            match (session_over, machine.as_mut()) {
+                                (true, _) | (_, None) => {
+                                    // Long break finished (or no machine) — session done.
+                                    ts.status = TimerStatus::Completed;
+                                    change = Some(PhaseChange {
+                                        title: "Pomodoro Completed".into(),
+                                        body: "All rounds finished. Well done!".into(),
+                                        is_completion: true,
+                                        work_finished: finished_work,
+                                    });
+                                }
+                                (false, Some(m)) => {
+                                    let (new_phase, duration) = m.next_phase();
+                                    ts.pomodoro_phase = Some(new_phase.clone());
+                                    ts.pomodoro_round = m.round;
+                                    ts.total_secs = duration;
+                                    ts.remaining_secs = duration;
+                                    let (title, body) = match new_phase {
+                                        PomodoroPhase::ShortBreak => (
+                                            "Work Session Done".to_string(),
+                                            format!(
+                                                "Take a {}-min short break.",
+                                                m.short_break_mins
+                                            ),
+                                        ),
+                                        PomodoroPhase::LongBreak => (
+                                            "Work Session Done".to_string(),
+                                            format!(
+                                                "All {} rounds done. Take a {}-min long break.",
+                                                m.total_rounds, m.long_break_mins
+                                            ),
+                                        ),
+                                        PomodoroPhase::Work => (
+                                            "Break Over".to_string(),
+                                            format!(
+                                                "Back to work — round {}/{}.",
+                                                m.round, m.total_rounds
+                                            ),
+                                        ),
+                                    };
+                                    change = Some(PhaseChange {
+                                        title,
+                                        body,
+                                        is_completion: false,
+                                        work_finished: finished_work,
+                                    });
+                                    let _ = app_handle.emit("timer-state", ts.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let Some(change) = change else { continue };
+
+            if change.work_finished {
+                let _ = app_handle.emit("pomodoro-work-completed", ());
+            }
+
+            // Play sound directly for immediate feedback
+            #[cfg(desktop)]
+            {
                 let cfg = state.config.read().await;
                 let sound_file = cfg.notification.sound_file.clone();
-                let sounds_dir = state.config_dir.join("sounds");
                 let volume = cfg.notification.sound_volume;
                 drop(cfg);
-                crate::notifier::sound::play(&sound_file, &sounds_dir, volume);
+                crate::notifier::sound::play(
+                    &sound_file,
+                    &state.config_dir.join("sounds"),
+                    volume,
+                );
+            }
 
-                // Send completion notification via dispatcher
-                let mode = state.timer_state.read().await.mode.clone();
-                let label = match mode {
-                    TimerMode::Pomodoro => "Pomodoro",
-                    TimerMode::Countdown => "Timer",
-                };
-                let source = match mode {
-                    TimerMode::Pomodoro => NotificationSource::Pomodoro,
-                    TimerMode::Countdown => NotificationSource::Timer,
-                };
-                let event = NotificationEvent {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source,
-                    event_type: "timer.completed".into(),
-                    title: format!("{} Completed", label),
-                    body: "Time's up!".into(),
-                    severity: Severity::Warning,
-                    timestamp: chrono::Local::now(),
-                    raw_payload: None,
-                    url: None,
-                    pid: None,
-                };
-                let _ = state.notification_tx.send(event).await;
+            let mode = state.timer_state.read().await.mode.clone();
+            let source = match mode {
+                TimerMode::Pomodoro => NotificationSource::Pomodoro,
+                TimerMode::Countdown => NotificationSource::Timer,
+            };
+            let event = NotificationEvent {
+                id: uuid::Uuid::new_v4().to_string(),
+                source,
+                event_type: if change.is_completion {
+                    "timer.completed".into()
+                } else {
+                    "timer.phase".into()
+                },
+                title: change.title,
+                body: change.body,
+                severity: Severity::Warning,
+                timestamp: chrono::Local::now(),
+                raw_payload: None,
+                url: None,
+                pid: None,
+            };
+            let _ = state.notification_tx.send(event).await;
+
+            if change.is_completion {
                 let _ = app_handle.emit("timer-completed", ());
                 break;
             }
@@ -85,9 +182,9 @@ fn spawn_timer_tick(app_handle: tauri::AppHandle, state: AppState) {
 
 #[tauri::command]
 pub async fn stop_timer(state: State<'_, AppState>) -> Result<(), String> {
-    if let Some(cancel) = state.timer_cancel.write().await.take() {
-        let _ = cancel.send(());
-    }
+    // Bump the generation so any loop that misses the cancel signal still dies.
+    state.timer_generation.fetch_add(1, Ordering::SeqCst);
+    cancel_existing_timer(state.inner()).await;
     let mut ts = state.timer_state.write().await;
     ts.status = TimerStatus::Idle;
     ts.remaining_secs = 0;
@@ -99,6 +196,15 @@ pub async fn pause_timer(state: State<'_, AppState>) -> Result<(), String> {
     let mut ts = state.timer_state.write().await;
     if matches!(ts.status, TimerStatus::Running) {
         ts.status = TimerStatus::Paused;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resume_timer(state: State<'_, AppState>) -> Result<(), String> {
+    let mut ts = state.timer_state.write().await;
+    if matches!(ts.status, TimerStatus::Paused) {
+        ts.status = TimerStatus::Running;
     }
     Ok(())
 }
@@ -121,14 +227,15 @@ pub async fn start_pomodoro(
     cancel_existing_timer(state.inner()).await;
 
     let config = state.config.read().await;
-    let work_secs = work_mins
-        .unwrap_or(config.timer.pomodoro_work_mins) as u64 * 60;
-    let _sbreak_secs = short_break_mins
-        .unwrap_or(config.timer.pomodoro_short_break_mins) as u64 * 60;
-    let _lbreak_secs = long_break_mins
-        .unwrap_or(config.timer.pomodoro_long_break_mins) as u64 * 60;
-    let _rounds = rounds.unwrap_or(config.timer.pomodoro_rounds);
+    let work_mins = work_mins.unwrap_or(config.timer.pomodoro_work_mins);
+    let short_break_mins =
+        short_break_mins.unwrap_or(config.timer.pomodoro_short_break_mins);
+    let long_break_mins =
+        long_break_mins.unwrap_or(config.timer.pomodoro_long_break_mins);
+    let rounds = rounds.unwrap_or(config.timer.pomodoro_rounds);
     drop(config);
+
+    let work_secs = work_mins as u64 * 60;
 
     {
         let mut ts = state.timer_state.write().await;
@@ -137,12 +244,15 @@ pub async fn start_pomodoro(
         ts.total_secs = work_secs;
         ts.remaining_secs = work_secs;
         ts.pomodoro_round = 1;
-        ts.pomodoro_phase = Some(crate::timer::engine::PomodoroPhase::Work);
+        ts.pomodoro_phase = Some(PomodoroPhase::Work);
+        ts.started_at = Some(chrono::Local::now());
     }
 
-    let (tx, _rx) = tokio::sync::oneshot::channel::<()>();
+    let generation = state.timer_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     *state.timer_cancel.write().await = Some(tx);
 
-    spawn_timer_tick(app, state.inner().clone());
+    let machine = PomodoroMachine::new(rounds, work_mins, short_break_mins, long_break_mins);
+    spawn_timer_tick(app, state.inner().clone(), generation, rx, Some(machine));
     Ok(())
 }

@@ -33,6 +33,8 @@ pub struct AppState {
     pub history: Arc<RwLock<NotificationHistory>>,
     pub timer_state: Arc<RwLock<TimerState>>,
     pub timer_cancel: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
+    /// Bumped on every start/stop so a superseded tick loop can detect it is stale.
+    pub timer_generation: Arc<std::sync::atomic::AtomicU64>,
     pub todo_store: Arc<RwLock<TodoStore>>,
     pub cli_installed_cache: CliStatusCache,
     /// Last notification's source process PID — used for click-to-focus

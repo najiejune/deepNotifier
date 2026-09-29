@@ -21,9 +21,13 @@ export function useTimer() {
     const unlisten2 = onEvent<void>("timer-completed", () => {
       setTimer((prev) => ({ ...prev, status: "completed" as const }));
     });
+    const unlisten3 = onEvent<TimerState>("timer-state", (state) => {
+      setTimer(state);
+    });
     return () => {
       unlisten1.then((fn) => fn());
       unlisten2.then((fn) => fn());
+      unlisten3.then((fn) => fn());
     };
   }, []);
 
@@ -57,9 +61,8 @@ export function useTimer() {
   }, []);
 
   const resume = useCallback(async () => {
-    // Resume the previous pomodoro
+    await api.resumeTimer();
     setTimer((prev) => ({ ...prev, status: "running" }));
-    await api.startPomodoro();
   }, []);
 
   return { timer, startPomodoro, pause, resume, stop };

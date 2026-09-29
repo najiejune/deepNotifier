@@ -58,7 +58,7 @@ export function HistoryPage() {
 
   return (
     <div className="p-5 space-y-4 h-full flex flex-col">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-text">
             {t.history.title}
@@ -74,8 +74,8 @@ export function HistoryPage() {
       </header>
 
       {/* Filter bar — row 1: search + quick filters */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 max-sm:w-full max-sm:flex-none">
           <Search
             size={12}
             className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
@@ -110,7 +110,7 @@ export function HistoryPage() {
       </div>
 
       {/* Filter bar — row 2: date range */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           type="date"
           value={dateFrom}

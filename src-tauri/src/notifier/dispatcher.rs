@@ -1,49 +1,16 @@
-use chrono::{DateTime, Local};
-use serde::{Deserialize, Serialize};
 use tauri::Emitter;
+#[cfg(not(desktop))]
+use tauri_plugin_notification::NotificationExt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotificationEvent {
-    pub id: String,
-    pub source: NotificationSource,
-    pub event_type: String,
-    pub title: String,
-    pub body: String,
-    pub severity: Severity,
-    pub timestamp: DateTime<Local>,
-    pub raw_payload: Option<serde_json::Value>,
-    pub url: Option<String>,
-    #[serde(default)]
-    pub pid: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum NotificationSource {
-    GitHub,
-    GitLab,
-    Bitbucket,
-    Custom,
-    Poll { endpoint_name: String },
-    Timer,
-    Pomodoro,
-    System,
-    Hook { cli_name: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum Severity {
-    Info,
-    Warning,
-    Critical,
-}
+pub use dn_core::models::{NotificationEvent, NotificationSource, Severity};
 
 pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
     let rx = state.notification_rx.clone();
     let dnd_active = state.dnd_active.clone();
     let history = state.history.clone();
+    #[cfg(desktop)]
     let config = state.config.clone();
+    #[cfg(desktop)]
     let pending_pid = state.pending_pid.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -61,6 +28,7 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
                     hist.push(event.clone());
                 }
 
+                #[cfg(desktop)]
                 let cfg = config.read().await;
                 let dnd = *dnd_active.read().await;
 
@@ -74,6 +42,26 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
                     continue;
                 }
 
+                // On mobile the only notification surface is the OS
+                // notification center (alert-server events use the same path
+                // via mobile::ingest).
+                #[cfg(not(desktop))]
+                {
+                    let mut builder = app_handle
+                        .notification()
+                        .builder()
+                        .title(&event.title)
+                        .body(&event.body);
+                    if let Some(url) = &event.url {
+                        builder = builder.extra("url", url.clone());
+                    }
+                    if let Err(e) = builder.show() {
+                        tracing::warn!("failed to show OS notification: {e}");
+                    }
+                }
+
+                #[cfg(desktop)]
+                {
                 // pretooluse is a timer-starter only — no notification effects.
                 // But we still resolve & store the terminal PID now while the CLI process
                 // is alive, so that the subsequent stop/posttooluse notification can focus
@@ -163,6 +151,7 @@ pub fn start(app_handle: tauri::AppHandle, state: crate::state::AppState) {
                             cfg.notification.toast_critical_secs,
                         ),
                     );
+                }
                 }
             }
         }
