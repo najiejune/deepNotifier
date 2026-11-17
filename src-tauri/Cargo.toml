@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+toml = "0.8"
 
 [dependencies]
 dn-core = { path = "../crates/dn-core" }
@@ -22,6 +23,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_yaml = "0.9"
 toml = "0.8"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }

@@ -425,6 +425,7 @@ pub(crate) fn default_cli_tools() -> Vec<CliToolConfig> {
         base("qoder", "Qoder"),
         base("gemini", "Gemini CLI"),
         base("kimi", "Kimi Code"),
+        base("deepseek", "DeepSeek"),
     ]
 }
 

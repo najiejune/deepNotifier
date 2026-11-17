@@ -160,6 +160,30 @@ npm run tauri build
 
 Suitable for running directly by double-clicking in a terminal without configured Rust/MSVC environment variables.
 
+### Embedding a Default Config at Build Time
+
+Set the `DEEPNOTIFIER_DEFAULT_CONFIG` environment variable to a TOML file during the build; its contents are **compiled into the binary** and become the defaults on first run (no `config.toml` yet) and on in-app "Reset configuration" — useful for distribution presets such as server URL, ports, or pull endpoints:
+
+```bash
+# Windows
+set DEEPNOTIFIER_DEFAULT_CONFIG=E:\path\to\defaults.toml
+build-release.bat
+
+# or pass it as the script argument (equivalent)
+build-release.bat E:\path\to\defaults.toml
+
+# macOS / Linux
+export DEEPNOTIFIER_DEFAULT_CONFIG=/path/to/defaults.toml
+npm run tauri build
+```
+
+Notes:
+
+- **Partial overlay**: only the fields you write are preset; everything else falls back to the built-in defaults. Template: `src-tauri/resources/default-config.example.toml`
+- **Build-time validation**: invalid TOML fails the build with a clear error — no broken binaries; editing the file triggers a rebuild
+- **When it applies**: first launch and config reset only; users with an existing `config.toml` are unaffected
+- **No secrets**: the contents ship inside the binary and are effectively public
+
 ### Build Parameters
 
 ```bash

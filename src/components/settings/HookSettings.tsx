@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/cn";
-import { api } from "@/lib/tauri";
+import { api, onEvent } from "@/lib/tauri";
 import { Terminal, Volume2 } from "lucide-react";
 import { CLI_ICON_MAP } from "./cliIcons";
 import type { HookConfig, CliToolConfig, HookInstallResult } from "@/types";
@@ -23,6 +23,7 @@ const CLI_VENDORS: Record<string, string> = {
   codebuddy: "Tencent",
   qoder: "QoderAI",
   kimi: "Moonshot AI",
+  deepseek: "DeepSeek",
 };
 
 /** Sound file select + preview button, shared by the event cards. */
@@ -88,11 +89,23 @@ function OptionRow({ label, children }: { label: string; children: React.ReactNo
 export function HookSettings({ config, onChange }: Props) {
   const t = useI18n();
   const [results, setResults] = useState<HookInstallResult[] | null>(null);
-  const [installing, setInstalling] = useState(false);
+  // Which action is running: "all" | "uninstall-all" | "install:<id>" | "uninstall:<id>"
+  const [busy, setBusy] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [cliStatuses, setCliStatuses] = useState<Record<string, boolean>>({});
   const [sounds, setSounds] = useState<string[]>([]);
 
   useEffect(() => { api.listSounds().then(setSounds).catch(() => {}); }, []);
+
+  // Live step updates from the backend (dsh bridge install runs pnpm/npx
+  // subprocesses that can take minutes).
+  useEffect(() => {
+    const unlisten = onEvent<{ cli_id: string; message: string }>(
+      "hook-install-progress",
+      (e) => setProgress(e.message),
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
 
   const refreshCliStatus = async () => {
     try {
@@ -126,8 +139,9 @@ export function HookSettings({ config, onChange }: Props) {
 
   const handleInstall = async () => {
     if (!window.confirm(t.settings.hook.installAllConfirm)) return;
-    setInstalling(true);
+    setBusy("all");
     setResults(null);
+    setProgress(null);
     try {
       const res = await api.installHooks();
       setResults(res);
@@ -137,13 +151,34 @@ export function HookSettings({ config, onChange }: Props) {
     } catch (e) {
       setResults([{ cli_id: "", success: false, message: String(e), config_path: "", events_injected: [] }]);
     } finally {
-      setInstalling(false);
+      setBusy(null);
+      setProgress(null);
+    }
+  };
+
+  const handleInstallOne = async (id: string) => {
+    patchTool(id, { enabled: true });
+    setBusy(`install:${id}`);
+    setResults(null);
+    setProgress(null);
+    try {
+      const res = await api.installHooks([id]);
+      setResults(res);
+      const updated = await api.getConfig();
+      onChange({ ...updated.hook });
+      refreshCliStatus();
+    } catch (e) {
+      setResults([{ cli_id: id, success: false, message: String(e), config_path: "", events_injected: [] }]);
+    } finally {
+      setBusy(null);
+      setProgress(null);
     }
   };
 
   const handleUninstall = async (cliIds?: string[]) => {
-    setInstalling(true);
+    setBusy(cliIds?.length === 1 ? `uninstall:${cliIds[0]}` : "uninstall-all");
     setResults(null);
+    setProgress(null);
     try {
       const res = await api.uninstallHooks(cliIds);
       setResults(res);
@@ -153,7 +188,8 @@ export function HookSettings({ config, onChange }: Props) {
     } catch (e) {
       setResults([{ cli_id: "", success: false, message: String(e), config_path: "", events_injected: [] }]);
     } finally {
-      setInstalling(false);
+      setBusy(null);
+      setProgress(null);
     }
   };
 
@@ -285,17 +321,17 @@ export function HookSettings({ config, onChange }: Props) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleInstall}
-                  disabled={installing}
+                  disabled={busy !== null}
                   className="px-3 py-1.5 text-xs bg-accent text-white rounded-sm hover:bg-accent/90 disabled:opacity-50"
                 >
-                  {installing ? "..." : t.settings.hook.installAll}
+                  {busy === "all" ? t.settings.hook.installing : t.settings.hook.installAll}
                 </button>
                 <button
                   onClick={() => { if (window.confirm(t.settings.hook.uninstallAllConfirm)) handleUninstall(); }}
-                  disabled={installing}
+                  disabled={busy !== null}
                   className="px-3 py-1.5 text-xs border border-border-subtle rounded-sm hover:bg-white disabled:opacity-50"
                 >
-                  {t.settings.hook.uninstallAll}
+                  {busy === "uninstall-all" ? t.settings.hook.uninstalling : t.settings.hook.uninstallAll}
                 </button>
                 <button
                   onClick={refreshCliStatus}
@@ -305,6 +341,19 @@ export function HookSettings({ config, onChange }: Props) {
                 </button>
               </div>
             </div>
+
+            {/* Live progress while an install/uninstall is running */}
+            {busy !== null && (
+              <div className="flex items-center gap-2 text-xs text-text-secondary px-2.5 py-1.5 rounded-sm border border-accent/30 bg-accent-dim">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-50" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                </span>
+                <span className="truncate">
+                  {progress ?? (busy.startsWith("uninstall") ? t.settings.hook.uninstalling : t.settings.hook.installing)}
+                </span>
+              </div>
+            )}
 
             {/* Install Results */}
             {results && (
@@ -370,27 +419,18 @@ export function HookSettings({ config, onChange }: Props) {
                   {/* Per-tool Install/Uninstall */}
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => {
-                        patchTool(tool.id, { enabled: true });
-                        api.installHooks([tool.id]).then((res) => {
-                          setResults(res);
-                          api.getConfig().then((cfg) => onChange({ ...cfg.hook }));
-                          refreshCliStatus();
-                        }).catch((e) =>
-                          setResults([{ cli_id: tool.id, success: false, message: String(e), config_path: "", events_injected: [] }])
-                        );
-                      }}
-                      disabled={installing}
+                      onClick={() => handleInstallOne(tool.id)}
+                      disabled={busy !== null}
                       className="px-2.5 py-1 text-xs bg-accent text-white rounded-sm hover:bg-accent/90 disabled:opacity-50"
                     >
-                      {t.settings.hook.install}
+                      {busy === `install:${tool.id}` ? t.settings.hook.installing : t.settings.hook.install}
                     </button>
                     <button
                       onClick={() => handleUninstall([tool.id])}
-                      disabled={installing}
+                      disabled={busy !== null}
                       className="px-2.5 py-1 text-xs border border-border-subtle rounded-sm hover:bg-white disabled:opacity-50"
                     >
-                      {t.settings.hook.uninstall}
+                      {busy === `uninstall:${tool.id}` ? t.settings.hook.uninstalling : t.settings.hook.uninstall}
                     </button>
                   </div>
                 </div>

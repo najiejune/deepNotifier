@@ -1,0 +1,41 @@
+# deepNotifier 构建期默认配置模板
+#
+# 用法：复制本文件并修改，然后在构建前设置环境变量指向它：
+#   Windows:  set DEEPNOTIFIER_DEFAULT_CONFIG=E:\path\to\defaults.toml
+#   Unix:     export DEEPNOTIFIER_DEFAULT_CONFIG=/path/to/defaults.toml
+# 或直接传给构建脚本： build-release.bat E:\path\to\defaults.toml
+#
+# 这是“部分覆盖”——只需写要预置的字段，未写的字段自动用内置默认值。
+# 生效时机：用户首次启动（还没有 config.toml）以及在 App 内“重置配置”。
+# 已有 config.toml 的用户不受影响。不要在这里放密钥或 token。
+
+[general]
+# language = "zh"            # 界面语言："zh" | "en"
+# mode = "push"              # 通知来源模式："push" | "pull" | "both"
+# run_on_startup = true      # 开机自启
+
+# 告警服务器（长连推送，协议见 docs/protocol-v1.md）
+[server]
+# server_url = "https://alert.example.com"
+# auto_connect = true        # 移动端启动时自动连接
+
+# Webhook 接收服务（GitHub/GitLab/Bitbucket/自定义/CLI Hook 打到这里）
+[webhook]
+# port = 3927
+# secret = "..."             # 注意：随二进制分发，等同公开
+# custom_enabled = true
+
+# 待办任务
+[todo]
+# pull_enabled = true
+# push_enabled = true
+# push_port = 3928
+
+# 预置一个待办拉取端点（可写多个 [[todo.pull_endpoints]]）
+# [[todo.pull_endpoints]]
+# id = "team-todos"
+# name = "Team Todo API"
+# url = "https://todo.example.com/api/todos"
+# interval_secs = 3600
+# method = "GET"             # "GET" | "POST"
+# headers = { Authorization = "Bearer ..." }

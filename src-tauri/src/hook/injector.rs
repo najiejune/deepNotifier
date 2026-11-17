@@ -4,8 +4,23 @@ use std::path::{Path, PathBuf};
 use crate::config::schema::CliToolConfig;
 use crate::hook::cli_configs::{CliMeta, ConfigFormat};
 use crate::hook::command_gen::{generate_webhook_command, GeneratedCommand};
+use crate::hook::dsh_plugin::{dsh_home, DSH_BRIDGE_PLUGIN};
 
 const INJECT_MARKER: &str = "deepNotifier";
+
+/// Ownership marker for the deepNotifier entry in `cordis.patch.yml`: the
+/// bridge's configPath points at a file under `~/.deepnotifier/`, which only
+/// our installer writes.
+const DSH_OWNERSHIP_MARKER: &str = "deepnotifier";
+
+/// Claude Code format hooks.json that the dsh bridge plugin is pointed at.
+/// Owned outright by deepNotifier, so installs rewrite it wholesale.
+fn deepseek_hooks_json_path(home_dir: &Path) -> PathBuf {
+    home_dir
+        .join(".deepnotifier")
+        .join("hooks")
+        .join("deepseek.json")
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HookInstallResult {
@@ -56,16 +71,22 @@ pub fn install_hooks(
     let mut chosen_template: Option<&str> = None;
     let mut chosen_path: Option<PathBuf> = None;
 
-    for template in meta.config_paths {
-        let resolved = resolve_config_path(template, project_dir, &home_dir);
-        if resolved.exists() {
-            chosen_template = Some(template);
-            chosen_path = Some(resolved);
-            break;
-        }
-        if chosen_path.is_none() {
-            chosen_template = Some(template);
-            chosen_path = Some(resolved);
+    if meta.id == "deepseek" {
+        // dsh's config root follows $DSH_HOME rather than plain ~
+        chosen_template = Some(meta.config_paths[0]);
+        chosen_path = Some(dsh_home(&home_dir).join("cordis.patch.yml"));
+    } else {
+        for template in meta.config_paths {
+            let resolved = resolve_config_path(template, project_dir, &home_dir);
+            if resolved.exists() {
+                chosen_template = Some(template);
+                chosen_path = Some(resolved);
+                break;
+            }
+            if chosen_path.is_none() {
+                chosen_template = Some(template);
+                chosen_path = Some(resolved);
+            }
         }
     }
 
@@ -147,6 +168,11 @@ pub fn install_hooks(
             pretool_cmd.as_deref(), posttool_cmd.as_deref(),
             meta,
         ),
+        ConfigFormat::Yaml => inject_yaml_dsh(
+            &config_path, stop_cmd.as_deref(),
+            pretool_cmd.as_deref(), posttool_cmd.as_deref(),
+            meta, &home_dir,
+        ),
     };
 
     match result {
@@ -174,12 +200,21 @@ pub fn uninstall_hooks(meta: &CliMeta, project_dir: &Path) -> HookInstallResult 
     let mut config_path: Option<PathBuf> = None;
     let mut _template_used: Option<&str> = None;
 
-    for template in meta.config_paths {
-        let resolved = resolve_config_path(template, project_dir, &home_dir);
-        if resolved.exists() {
-            config_path = Some(resolved);
-            _template_used = Some(template);
-            break;
+    if meta.id == "deepseek" {
+        // dsh's config root follows $DSH_HOME rather than plain ~
+        let p = dsh_home(&home_dir).join("cordis.patch.yml");
+        if p.exists() {
+            config_path = Some(p);
+            _template_used = Some(meta.config_paths[0]);
+        }
+    } else {
+        for template in meta.config_paths {
+            let resolved = resolve_config_path(template, project_dir, &home_dir);
+            if resolved.exists() {
+                config_path = Some(resolved);
+                _template_used = Some(template);
+                break;
+            }
         }
     }
 
@@ -221,6 +256,7 @@ pub fn uninstall_hooks(meta: &CliMeta, project_dir: &Path) -> HookInstallResult 
     let result = match meta.config_format {
         ConfigFormat::Json => remove_json_hooks(meta.id, &config_path, meta),
         ConfigFormat::Toml => remove_toml_hooks(meta.id, &config_path),
+        ConfigFormat::Yaml => remove_yaml_dsh(&config_path, &home_dir),
     };
 
     match result {
@@ -788,6 +824,131 @@ fn remove_toml_hooks(
     Ok(removed)
 }
 
+// ---- YAML injection (DeepSeek Harness) ----
+
+/// A cordis.patch.yml entry is ours when its bridge configPath points at the
+/// deepNotifier-managed hooks.json. Matches both the current `insert` shape
+/// and the legacy flat shape written by older versions (so uninstall still
+/// cleans those up).
+fn is_dsh_owned_entry(v: &serde_yaml::Value) -> bool {
+    let is_owned_plugin = |p: &serde_yaml::Value| {
+        p.get("config")
+            .and_then(|c| c.get("configPath"))
+            .and_then(|p| p.as_str())
+            .is_some_and(|p| p.contains(DSH_OWNERSHIP_MARKER))
+    };
+    if is_owned_plugin(v) {
+        return true;
+    }
+    v.get("insert")
+        .and_then(|i| i.as_sequence())
+        .is_some_and(|items| items.iter().any(is_owned_plugin))
+    // Note: whole-entry removal is fine — our insert list only ever
+    // contains the single bridge entry we wrote.
+}
+
+fn read_dsh_patch(config_path: &Path) -> Result<Vec<serde_yaml::Value>, String> {
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse cordis.patch.yml (top level must be a list of plugin entries): {}", e))
+}
+
+fn inject_yaml_dsh(
+    config_path: &Path,
+    stop_cmd: Option<&str>,
+    pretool_cmd: Option<&str>,
+    posttool_cmd: Option<&str>,
+    meta: &CliMeta,
+    home_dir: &Path,
+) -> Result<(), String> {
+    // 1. Write the Claude Code format hooks.json we own outright.
+    let hooks_json = deepseek_hooks_json_path(home_dir);
+    let mut hooks_obj = serde_json::Map::new();
+    inject_standard_event(&mut hooks_obj, meta.stop_event, stop_cmd);
+    inject_standard_event(&mut hooks_obj, meta.pretool_event, pretool_cmd);
+    inject_standard_event(&mut hooks_obj, meta.posttool_event, posttool_cmd);
+    let hooks_doc = serde_json::json!({ "hooks": hooks_obj });
+    if let Some(parent) = hooks_json.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create hooks dir: {}", e))?;
+    }
+    let hooks_content = serde_json::to_string_pretty(&hooks_doc)
+        .map_err(|e| format!("Failed to serialize hooks.json: {}", e))?;
+    fs::write(&hooks_json, hooks_content)
+        .map_err(|e| format!("Failed to write hooks.json: {}", e))?;
+
+    // 2. Mount the bridge plugin in cordis.patch.yml, pointed at that file.
+    //    dsh requires new plugins to be introduced via an `insert` list (a
+    //    bare `- name:` row is a config patch and fails with "id is required
+    //    for non-insert patches"). Forward slashes keep the path YAML/
+    //    Windows safe.
+    let mut entries = read_dsh_patch(config_path)?;
+    entries.retain(|v| !is_dsh_owned_entry(v));
+
+    let config_path_str = hooks_json.to_string_lossy().replace('\\', "/");
+    let mut config = serde_yaml::Mapping::new();
+    config.insert(
+        serde_yaml::Value::String("configPath".into()),
+        serde_yaml::Value::String(config_path_str),
+    );
+    let mut plugin = serde_yaml::Mapping::new();
+    plugin.insert(
+        serde_yaml::Value::String("id".into()),
+        serde_yaml::Value::String("deepnotifier-hooks-bridge".into()),
+    );
+    plugin.insert(
+        serde_yaml::Value::String("name".into()),
+        serde_yaml::Value::String(DSH_BRIDGE_PLUGIN.into()),
+    );
+    plugin.insert(
+        serde_yaml::Value::String("config".into()),
+        serde_yaml::Value::Mapping(config),
+    );
+    let mut entry = serde_yaml::Mapping::new();
+    entry.insert(
+        serde_yaml::Value::String("insert".into()),
+        serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(plugin)]),
+    );
+    entries.push(serde_yaml::Value::Mapping(entry));
+
+    let out = serde_yaml::to_string(&entries)
+        .map_err(|e| format!("Failed to serialize cordis.patch.yml: {}", e))?;
+    fs::write(config_path, out)
+        .map_err(|e| format!("Failed to write cordis.patch.yml: {}", e))?;
+
+    Ok(())
+}
+
+fn remove_yaml_dsh(config_path: &Path, home_dir: &Path) -> Result<usize, String> {
+    let mut removed = 0;
+
+    if config_path.exists() {
+        let mut entries = read_dsh_patch(config_path)?;
+        let before = entries.len();
+        entries.retain(|v| !is_dsh_owned_entry(v));
+        removed += before - entries.len();
+        let out = serde_yaml::to_string(&entries)
+            .map_err(|e| format!("Failed to serialize cordis.patch.yml: {}", e))?;
+        fs::write(config_path, out)
+            .map_err(|e| format!("Failed to write cordis.patch.yml: {}", e))?;
+    }
+
+    let hooks_json = deepseek_hooks_json_path(home_dir);
+    if hooks_json.exists() {
+        fs::remove_file(&hooks_json).ok();
+        removed += 1;
+    }
+
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -855,6 +1016,80 @@ mod tests {
         let root: toml::Value =
             toml::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
         assert_eq!(root["hooks"].as_array().unwrap().len(), 0);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn deepseek_meta() -> CliMeta {
+        all_cli_metas().into_iter().find(|m| m.id == "deepseek").unwrap()
+    }
+
+    #[test]
+    fn deepseek_inject_reinstall_and_remove_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("dn-dsh-inject-{}", std::process::id()));
+        let home = dir.join("home");
+        fs::create_dir_all(&home).unwrap();
+        let patch = dir.join("cordis.patch.yml");
+        // A pre-existing user entry must survive install and uninstall
+        fs::write(&patch, "- name: other-plugin\n  config:\n    foo: 1\n").unwrap();
+
+        let meta = deepseek_meta();
+        let install = |patch: &Path, home: &Path| {
+            inject_yaml_dsh(
+                patch,
+                Some("node -e \"stop /hook/cli\""),
+                Some("node -e \"pre /hook/cli\""),
+                Some("node -e \"post /hook/cli\""),
+                &meta,
+                home,
+            )
+            .unwrap()
+        };
+        install(&patch, &home);
+
+        // cordis.patch.yml: user entry preserved + one owned bridge entry
+        let entries = read_dsh_patch(&patch).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["name"].as_str().unwrap(), "other-plugin");
+        let owned: Vec<_> = entries.iter().filter(|v| is_dsh_owned_entry(v)).collect();
+        assert_eq!(owned.len(), 1);
+        assert_eq!(
+            owned[0]["insert"][0]["name"].as_str().unwrap(),
+            DSH_BRIDGE_PLUGIN
+        );
+        assert_eq!(
+            owned[0]["insert"][0]["id"].as_str().unwrap(),
+            "deepnotifier-hooks-bridge"
+        );
+        let config_path_str = owned[0]["insert"][0]["config"]["configPath"]
+            .as_str()
+            .unwrap();
+        assert!(config_path_str.contains(DSH_OWNERSHIP_MARKER));
+        assert!(!config_path_str.contains('\\'));
+
+        // hooks.json: Claude Code format with Stop/PreToolUse/PostToolUse
+        let hooks_json = deepseek_hooks_json_path(&home);
+        let doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&hooks_json).unwrap()).unwrap();
+        let hooks = doc["hooks"].as_object().unwrap();
+        let mut events: Vec<_> = hooks.keys().cloned().collect();
+        events.sort();
+        assert_eq!(events, ["PostToolUse", "PreToolUse", "Stop"]);
+        for (_event, groups) in hooks {
+            assert!(groups[0]["hooks"][0]["deepNotifier"].as_bool().unwrap());
+        }
+
+        // Re-install must not duplicate the patch entry
+        install(&patch, &home);
+        assert_eq!(read_dsh_patch(&patch).unwrap().len(), 2);
+
+        // Removal strips the owned entry and the hooks.json
+        let removed = remove_yaml_dsh(&patch, &home).unwrap();
+        assert_eq!(removed, 2);
+        let entries = read_dsh_patch(&patch).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["name"].as_str().unwrap(), "other-plugin");
+        assert!(!hooks_json.exists());
 
         fs::remove_dir_all(&dir).ok();
     }

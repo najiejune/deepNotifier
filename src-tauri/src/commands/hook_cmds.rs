@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::config::schema::HookStatus;
 use crate::hook::cli_configs::{all_cli_metas, check_cli_installed};
@@ -15,6 +15,7 @@ pub struct CliStatus {
 
 #[tauri::command]
 pub async fn install_hooks(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     cli_ids: Option<Vec<String>>,
 ) -> Result<Vec<HookInstallResult>, String> {
@@ -27,14 +28,14 @@ pub async fn install_hooks(
             .cli_tools
             .iter()
             .filter(|t| {
-                if t.enabled {
-                    return true;
-                }
-                // When specific CLI IDs are requested, include them even if not globally enabled
+                // Specific CLI IDs requested: strict filter, install exactly
+                // those — otherwise a single-CLI install would silently drag
+                // every globally enabled tool along (e.g. triggering the
+                // deepseek bridge install when installing another CLI).
                 if let Some(ref ids) = cli_ids {
                     return ids.contains(&t.id);
                 }
-                false
+                t.enabled
             })
             .cloned()
             .collect();
@@ -75,6 +76,66 @@ pub async fn install_hooks(
             continue;
         }
 
+        // DeepSeek Harness: the bridge package must be a profile dependency
+        // BEFORE cordis.patch.yml references it — a mounted but unresolvable
+        // plugin makes dsh fail to boot. Install the bridge into every
+        // profile first and only write the patch mount when that fully
+        // succeeds. Blocking subprocess calls run on the blocking thread
+        // pool to keep the runtime free.
+        if meta.id == "deepseek" {
+            let home = dirs::home_dir().unwrap_or_default();
+            let progress_app = app.clone();
+            let outcome = match tokio::task::spawn_blocking(move || {
+                crate::hook::dsh_plugin::ensure_bridge_installed(&home, &|msg: &str| {
+                    let _ = progress_app.emit(
+                        "hook-install-progress",
+                        serde_json::json!({ "cli_id": "deepseek", "message": msg }),
+                    );
+                })
+            })
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    results.push(HookInstallResult {
+                        cli_id: tool.id.clone(),
+                        success: false,
+                        message: format!("bridge install task failed: {}", e),
+                        config_path: String::new(),
+                        events_injected: vec![],
+                    });
+                    continue;
+                }
+            };
+            let safe_to_mount = outcome.runner.is_some()
+                && !outcome.profiles.is_empty()
+                && outcome.all_succeeded();
+            if !safe_to_mount {
+                results.push(HookInstallResult {
+                    cli_id: tool.id.clone(),
+                    success: false,
+                    message: format!(
+                        "bridge plugin not ready, hook mount skipped (mounting without the package would break dsh boot){}",
+                        outcome.summary("add")
+                    ),
+                    config_path: String::new(),
+                    events_injected: vec![],
+                });
+                continue;
+            }
+            let mut result = injector::install_hooks(
+                meta,
+                tool,
+                port,
+                &cwd,
+                approval_timeout_enabled,
+                approval_timeout_secs,
+            );
+            result.message.push_str(&outcome.summary("add"));
+            results.push(result);
+            continue;
+        }
+
         let result = injector::install_hooks(meta, tool, port, &cwd, approval_timeout_enabled, approval_timeout_secs);
         results.push(result);
     }
@@ -101,6 +162,7 @@ pub async fn install_hooks(
 
 #[tauri::command]
 pub async fn uninstall_hooks(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     cli_ids: Option<Vec<String>>,
 ) -> Result<Vec<HookInstallResult>, String> {
@@ -136,7 +198,30 @@ pub async fn uninstall_hooks(
             }
         };
 
-        let result = injector::uninstall_hooks(meta, &cwd);
+        let mut result = injector::uninstall_hooks(meta, &cwd);
+
+        // DeepSeek Harness: also remove the bridge package from every
+        // profile, mirroring the install path.
+        if result.success && meta.id == "deepseek" {
+            let home = dirs::home_dir().unwrap_or_default();
+            let progress_app = app.clone();
+            match tokio::task::spawn_blocking(move || {
+                crate::hook::dsh_plugin::uninstall_bridge(&home, &|msg: &str| {
+                    let _ = progress_app.emit(
+                        "hook-install-progress",
+                        serde_json::json!({ "cli_id": "deepseek", "message": msg }),
+                    );
+                })
+            })
+            .await
+            {
+                Ok(outcome) => result.message.push_str(&outcome.summary("remove")),
+                Err(e) => result
+                    .message
+                    .push_str(&format!("; bridge removal task failed: {}", e)),
+            }
+        }
+
         results.push(result);
     }
 

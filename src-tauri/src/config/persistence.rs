@@ -2,6 +2,37 @@ use std::path::Path;
 
 use crate::config::schema::{default_cli_tools, AppConfig};
 
+/// Compile-time embedded default config (DEEPNOTIFIER_DEFAULT_CONFIG at build
+/// time; empty when unset). Written by build.rs into OUT_DIR.
+const EMBEDDED_DEFAULT_CONFIG: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/embedded_default_config.toml"));
+
+/// Parse embedded default TOML: partial documents are fine, missing fields
+/// fall back to defaults via serde.
+fn parse_embedded(content: &str) -> Result<AppConfig, toml::de::Error> {
+    toml::from_str(content)
+}
+
+/// The first-run / reset baseline: the build-time embedded default config
+/// when present, otherwise the hardcoded defaults.
+pub fn embedded_default() -> AppConfig {
+    let content = EMBEDDED_DEFAULT_CONFIG.trim();
+    if content.is_empty() {
+        return AppConfig::default();
+    }
+    match parse_embedded(content) {
+        Ok(config) => {
+            tracing::info!("Using build-time embedded default config");
+            config
+        }
+        Err(e) => {
+            // build.rs already rejects invalid TOML, so this is defense in depth
+            tracing::warn!("Embedded default config failed to parse: {}, using defaults", e);
+            AppConfig::default()
+        }
+    }
+}
+
 /// Append CLI tools introduced after the user's config was persisted, so new
 /// entries (e.g. "kimi") show up without resetting existing settings.
 fn merge_new_cli_tools(config: &mut AppConfig) {
@@ -42,7 +73,7 @@ pub fn load_or_create(config_dir: &Path) -> AppConfig {
             }
         }
     }
-    let config = AppConfig::default();
+    let config = embedded_default();
     save(&config_dir, &config);
     config
 }
@@ -94,6 +125,37 @@ max_history = 100
         assert_eq!(config.hook.approval_timeout_secs, 120);
         assert_eq!(config.todo.push_port, 3928);
         assert_eq!(config.marquee.tracks, 2);
+    }
+
+    #[test]
+    fn embedded_partial_toml_overlays_defaults() {
+        let config = parse_embedded(
+            r#"
+[server]
+server_url = "https://alert.example.com"
+
+[todo]
+pull_enabled = true
+push_port = 4000
+"#,
+        )
+        .expect("partial embedded config must parse");
+        assert_eq!(config.server.server_url, "https://alert.example.com");
+        assert!(config.todo.pull_enabled);
+        assert_eq!(config.todo.push_port, 4000);
+        // Untouched fields keep their defaults
+        assert_eq!(config.hook.approval_timeout_secs, 120);
+        assert_eq!(config.marquee.tracks, 2);
+        assert!(!config.general.run_on_startup || config.general.run_on_startup); // no panic
+    }
+
+    #[test]
+    fn embedded_empty_and_invalid_behave() {
+        // Empty content parses to a full-default config
+        let config = parse_embedded("").expect("empty parses");
+        assert_eq!(config.todo.push_port, 3928);
+        // Invalid TOML is an error (build.rs rejects it at compile time)
+        assert!(parse_embedded("[not valid").is_err());
     }
 }
 

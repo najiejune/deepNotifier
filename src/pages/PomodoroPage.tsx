@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Pause, Play, Square, Plus } from "lucide-react";
 import { useTimer } from "@/hooks/useTimer";
 import { useTodos } from "@/hooks/useTodos";
@@ -35,14 +35,22 @@ export function PomodoroPage() {
   const [currentTaskId, setCurrentTaskId] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogState>(null);
 
+  // Subscribe once; read the latest task id / increment through refs so the
+  // listener isn't torn down and re-registered on every render.
+  const currentTaskIdRef = useRef(currentTaskId);
+  currentTaskIdRef.current = currentTaskId;
+  const incrementRef = useRef(pomodoroCounts.increment);
+  incrementRef.current = pomodoroCounts.increment;
+
   useEffect(() => {
     const unlisten = onEvent<void>("pomodoro-work-completed", () => {
-      if (currentTaskId) {
-        pomodoroCounts.increment(currentTaskId);
+      const id = currentTaskIdRef.current;
+      if (id) {
+        incrementRef.current(id);
       }
     });
     return () => { unlisten.then((fn) => fn()); };
-  }, [currentTaskId, pomodoroCounts]);
+  }, []);
 
   const filtered = filterByDate(todos, dateFilter);
 

@@ -44,10 +44,10 @@ export function TodoDialog({
   const handleSave = () => {
     if (!text.trim()) return;
     onSave(text.trim(), dueDate, {
-      workMins,
-      shortBreakMins,
-      longBreakMins,
-      rounds,
+      workMins: Math.max(1, Math.round(workMins)),
+      shortBreakMins: Math.max(0, Math.round(shortBreakMins)),
+      longBreakMins: Math.max(0, Math.round(longBreakMins)),
+      rounds: Math.max(1, Math.round(rounds)),
     });
   };
 
@@ -65,6 +65,7 @@ export function TodoDialog({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            disabled={isEdit}
             autoFocus
           />
 

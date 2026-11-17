@@ -232,6 +232,8 @@ export const translations = {
         installFailed: "Hook installation failed",
         uninstallSuccess: "Hook uninstalled",
         uninstallFailed: "Hook uninstall failed",
+        installing: "Installing…",
+        uninstalling: "Uninstalling…",
       },
       todo: {
         pull: "Pull Todos",
@@ -561,6 +563,8 @@ export const translations = {
         installFailed: "Hook 安装失败",
         uninstallSuccess: "Hook 已卸载",
         uninstallFailed: "Hook 卸载失败",
+        installing: "安装中…",
+        uninstalling: "卸载中…",
       },
       todo: {
         pull: "拉取待办",

@@ -47,6 +47,12 @@ fn spawn_timer_tick(
             let mut change: Option<PhaseChange> = None;
             {
                 let mut ts = state.timer_state.write().await;
+                // Re-check the generation while holding the write lock: a new
+                // session may have bumped it and rewritten the state while this
+                // loop was waiting for the lock.
+                if state.timer_generation.load(Ordering::SeqCst) != generation {
+                    break;
+                }
                 if ts.status != TimerStatus::Running {
                     // Paused — wait for resume on the next tick.
                     continue;
@@ -135,19 +141,9 @@ fn spawn_timer_tick(
                 let _ = app_handle.emit("pomodoro-work-completed", ());
             }
 
-            // Play sound directly for immediate feedback
-            #[cfg(desktop)]
-            {
-                let cfg = state.config.read().await;
-                let sound_file = cfg.notification.sound_file.clone();
-                let volume = cfg.notification.sound_volume;
-                drop(cfg);
-                crate::notifier::sound::play(
-                    &sound_file,
-                    &state.config_dir.join("sounds"),
-                    volume,
-                );
-            }
+            // Sound/marquee/toast are handled by the notification dispatcher,
+            // which applies DND and the user's sound settings. Playing sound
+            // directly here would bypass DND and double up with the dispatcher.
 
             let mode = state.timer_state.read().await.mode.clone();
             let source = match mode {
@@ -188,6 +184,9 @@ pub async fn stop_timer(state: State<'_, AppState>) -> Result<(), String> {
     let mut ts = state.timer_state.write().await;
     ts.status = TimerStatus::Idle;
     ts.remaining_secs = 0;
+    ts.total_secs = 0;
+    ts.pomodoro_phase = None;
+    ts.started_at = None;
     Ok(())
 }
 
@@ -224,6 +223,10 @@ pub async fn start_pomodoro(
     long_break_mins: Option<u32>,
     rounds: Option<u32>,
 ) -> Result<(), String> {
+    // Bump the generation BEFORE cancelling: an old loop that already passed
+    // its generation check and is waiting on the timer_state write lock must
+    // not run against the new session's state.
+    let generation = state.timer_generation.fetch_add(1, Ordering::SeqCst) + 1;
     cancel_existing_timer(state.inner()).await;
 
     let config = state.config.read().await;
@@ -248,7 +251,6 @@ pub async fn start_pomodoro(
         ts.started_at = Some(chrono::Local::now());
     }
 
-    let generation = state.timer_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     *state.timer_cancel.write().await = Some(tx);
 

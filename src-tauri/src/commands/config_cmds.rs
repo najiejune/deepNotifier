@@ -83,7 +83,7 @@ pub async fn reset_config(
 ) -> Result<AppConfig, String> {
     #[cfg(not(desktop))]
     let _ = &app;
-    let mut config = AppConfig::default();
+    let mut config = persistence::embedded_default();
     // Keep the alert-server connection: resetting preferences must not
     // silently unregister the device or drop its credentials.
     {

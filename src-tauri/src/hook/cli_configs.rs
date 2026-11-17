@@ -5,6 +5,7 @@ use std::process::Command;
 pub enum ConfigFormat {
     Json,
     Toml,
+    Yaml,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +149,29 @@ pub fn all_cli_metas() -> Vec<CliMeta> {
             approval_timeout_supported: true,
             binary_names: &["kimi", "kimi.exe", "kimi-cli"],
             sentinel_paths: &["~/.kimi/", "~/.kimi-code/"],
+        },
+        CliMeta {
+            id: "deepseek",
+            name: "DeepSeek",
+            _vendor: "DeepSeek",
+            // DeepSeek Harness (dsh) reads no static hook config; hooks run
+            // through the bundled @deepseek-ai/dsh-hooks-claude-code bridge
+            // plugin, mounted in ~/.dsh/cordis.patch.yml with a configPath
+            // pointing at a Claude Code format hooks.json. The bridge has no
+            // Notification event, so only Stop/PreToolUse/PostToolUse are wired.
+            stop_event: Some("Stop"),
+            notification_event: None,
+            pretool_event: Some("PreToolUse"),
+            posttool_event: Some("PostToolUse"),
+            config_paths: &["~/.dsh/cordis.patch.yml"],
+            config_format: ConfigFormat::Yaml,
+            plugin_create_dirs: &[],
+            approval_timeout_supported: true,
+            // Note: Debian/Ubuntu ship an unrelated `dsh` (dancer's shell),
+            // so the binary probe can false-positive there; the ~/.dsh/
+            // sentinel is the reliable signal.
+            binary_names: &["dsh", "dsh.exe", "dsh-tui", "dsh-tui.exe"],
+            sentinel_paths: &["~/.dsh/"],
         },
     ]
 }

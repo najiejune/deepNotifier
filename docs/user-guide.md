@@ -146,7 +146,9 @@ Periodically fetches data from specified HTTP endpoints, detects changes via con
 
 Injects hook configurations into CLI AI assistants so their events are pushed to deepNotifier and shown as normal notifications (toast / marquee / sound).
 
-**Supported tools**: Claude Code, Codex, OpenCode, Gemini CLI, Kiro, CodeBuddy, Qoder, Kimi Code.
+**Supported tools**: Claude Code, Codex, OpenCode, Gemini CLI, Kiro, CodeBuddy, Qoder, Kimi Code, DeepSeek Harness (dsh).
+
+> **DeepSeek Harness note**: dsh has no static hook config; deepNotifier mounts the official `@deepseek-ai/dsh-hooks-claude-code` bridge via an `insert` entry in `~/.dsh/cordis.patch.yml` (pointed at a managed `hooks.json`) and runs `dsh plugin --profile <name> add ...` for each existing profile to install the bridge package together with its peer `@deepseek-ai/dsh-hook-protocol` (dsh profiles disable pnpm's autoInstallPeers, and the protocol package is not in the runtime tree, so it must be installed explicitly or the bridge fails to activate). If no `dsh` binary is on PATH, the CLI is invoked through `npx -y @deepseek-ai/dsh` instead; `pnpm` is required (`dsh plugin` forwards to it) and is installed automatically via `npm i -g pnpm` when missing. The bridge version is matched to the installed dsh version (falling back to the `@next` dist-tag), because the bridge's `latest` tag can lag the runtime. The patch mount is only written after the bridge package installed successfully into every profile — mounting an unresolvable plugin would make dsh fail to boot. Uninstalling removes the mount, the managed `hooks.json`, and the bridge package from each profile. **Restart `dsh` after installing/uninstalling** — it reads the config once at startup. The bridge has no Notification event, so approval alerts come from PreToolUse/PostToolUse only. After upgrading dsh, reinstall the hook so the bridge version is re-matched.
 
 #### How It Works
 
